@@ -12,12 +12,19 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 from sklearn.metrics import accuracy_score, f1_score
 import plotly.graph_objects as go
-from models import npy_preprocessor
-from eda import outlier, augmented_dataset, QMDataset
 from ViT_yunjun import ViT, rotate_molecule, MoleculeSequenceDataset, get_data
 from torch.optim.lr_scheduler import LinearLR, SequentialLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
 import os
 from pytorch_lightning.tuner import Tuner
+
+def read_data(filename):
+    data = np.load(filename, allow_pickle=True)
+    return pd.DataFrame(data.tolist())
+
+def npy_preprocessor(filename):
+    df = read_data(filename)
+    # return df[df['chiral_centers'].apply(lambda x: len(x) == 1)].reset_index(drop=True)
+    return df
 
 
 def augment_data(X_train, y_train, num_samples, rotate_molecule_func):
@@ -207,7 +214,7 @@ def find_optimal_lr(model: pl.LightningModule, datamodule: pl.LightningDataModul
     # Get the suggestion
     suggested_lr = lr_finder.suggestion()
     
-    print(f"✅ Optimal learning rate found: {suggested_lr}")
+    print(f"Optimal learning rate found: {suggested_lr}")
     
 
     fig = lr_finder.plot(suggest=True)
@@ -220,10 +227,10 @@ def main():
     pl.seed_everything(42)
     TASK = 1
 
-    EPOCHS = 30
+    EPOCHS = 10
     BATCH_SIZE = 512
-    AUGMENT_DATA = True
-    RECYCLE_SAMPLES = True # New parameter to control recycling
+    AUGMENT_DATA = False
+    RECYCLE_SAMPLES = True 
 
     emb_dim = 384
     emb_dropout = 0.05
@@ -240,7 +247,6 @@ def main():
     X_task1 = df_task1['xyz'].values 
     y_task1 = (np.stack(df_task1['rotation'].values)[:, 1] > 0).astype(int)
     
-    # Thrown Away Data (Used for augmenting the train set if recycle=True)
     df_thrown = df[~task1_mask]
     X_thrown = df_thrown['xyz'].values
     y_thrown = (np.stack(df_thrown['rotation'].values)[:, 1] > 0).astype(int) # Recalculate y for consistency
@@ -256,15 +262,13 @@ def main():
         X_train_val, y_train_val, test_size=0.1, random_state=43, stratify=y_train_val
     )
     
-    # 4. Concatenate Thrown Away samples to the initial train set if recycling is active
+
     if RECYCLE_SAMPLES and len(X_thrown) > 0:
-        print("Recycling thrown away samples into the training set...")
+
         X_train = np.concatenate((X_train, X_thrown), axis=0)
         y_train = np.concatenate((y_train, y_thrown), axis=0)
     
-    print(f"Final Base Training Set Size (Task 1 + Recycled): {len(X_train)}")
-    
-    # 5. Pass the pre-split data to the QMDataModule
+
     data_module = QMDataModule(
         X_train=X_train, Y_train=y_train, 
         X_val=X_val, Y_val=y_val, 
@@ -275,14 +279,14 @@ def main():
     model = ViTModule(learning_rate=1e-7, embedding_dim= emb_dim, embedding_dropout_rate=emb_dropout, mlp_dropout_rate=mlp_dropout)
 
     # optimal_lr = find_optimal_lr(model, data_module)
-    optimal_lr = 4e-05
+    optimal_lr = 1e-5
 
     model.hparams.learning_rate = optimal_lr
 
     trainer = pl.Trainer(
         max_epochs=EPOCHS,
         accelerator='auto',
-        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_recycle{RECYCLE_SAMPLES}"),
+        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_recycle{RECYCLE_SAMPLES}_lr{optimal_lr:.1e}"),
         callbacks=[LearningRateMonitor(logging_interval='step')]
     )
     
