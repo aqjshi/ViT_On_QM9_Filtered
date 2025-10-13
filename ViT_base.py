@@ -107,7 +107,8 @@ class ViTModule(pl.LightningModule):
         self.test_acc = Accuracy(task="multiclass", num_classes=2)
 
         self.validation_step_outputs = []
-
+        self.test_step_outputs = [] 
+    
     def forward(self, x):
         return self.model(x)
 
@@ -144,6 +145,8 @@ class ViTModule(pl.LightningModule):
         f1 = f1_score(all_labels, all_preds, average='weighted')
         self.log('val/f1_score', f1)
         self.validation_step_outputs.clear()
+
+
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
@@ -151,11 +154,34 @@ class ViTModule(pl.LightningModule):
         
         preds = torch.argmax(logits, dim=1)
         self.test_acc(preds, y)
-
+        
+        # --- EDIT 1: Capture predictions and labels ---
+        self.test_step_outputs.append({'preds': preds, 'labels': y})
+        
         self.log('test/loss', loss, on_epoch=True)
         self.log('test/acc', self.test_acc, on_epoch=True)
         return loss
 
+    def on_test_epoch_end(self):
+        # --- EDIT 2: Aggregate, calculate, and log CM to WandB ---
+        
+        # 1. Aggregate predictions and labels from all test batches
+        all_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
+        all_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
+
+        # Check if logger is available before attempting to log to WandB
+        if self.logger:
+             self.logger.experiment.log({
+                 "test/confusion_matrix": wandb.plot.confusion_matrix(
+                     preds=all_preds,
+                     y_true=all_labels,
+                     class_names=['Negative', 'Positive'] # Assuming these are your two classes
+                 ),
+                 "global_step": self.global_step 
+             })
+
+        # Clear the outputs to free up memory
+        self.test_step_outputs.clear()
     def configure_optimizers(self):
   
         EPOCHS = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 30 
@@ -163,9 +189,10 @@ class ViTModule(pl.LightningModule):
     
         decay_start_epoch = int(EPOCHS / 2)
       
-        optimizer = torch.optim.Adam(
+        optimizer = torch.optim.AdamW(
             params=self.parameters(), 
-            lr=self.hparams.learning_rate
+            lr=self.hparams.learning_rate,
+            weight_decay=1e-4 
         )
         
 
@@ -180,7 +207,7 @@ class ViTModule(pl.LightningModule):
         scheduler_decay = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.1,  # Decays to 10% of the initial LR
+            end_factor=0.01,  # Decays to 10% of the initial LR
             total_iters=(EPOCHS - decay_start_epoch)
         )
 
@@ -227,7 +254,7 @@ def main():
     pl.seed_everything(42)
     TASK = 1
 
-    EPOCHS = 20
+    EPOCHS = 30
     BATCH_SIZE = 512
     AUGMENT_DATA = True
     emb_dim = 384
@@ -256,7 +283,7 @@ def main():
     trainer = pl.Trainer(
         max_epochs=EPOCHS,
         accelerator='auto',
-        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_aug500k_embdrop{emb_dropout}_mlpdrop{mlp_dropout}_linear"),
+        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_aug500k_embdrop{emb_dropout}_mlpdrop{mlp_dropout}_linear_l2decay"),
         callbacks=[LearningRateMonitor(logging_interval='step')]
     )
     
