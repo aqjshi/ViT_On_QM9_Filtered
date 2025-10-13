@@ -11,13 +11,19 @@ import numpy as np
 from pytorch_lightning.loggers import WandbLogger
 import wandb
 from sklearn.metrics import accuracy_score, f1_score
-import plotly.graph_objects as go
-from models import npy_preprocessor
-from eda import outlier, augmented_dataset, QMDataset
 from ViT_yunjun import ViT, rotate_molecule, MoleculeSequenceDataset, get_data
 from torch.optim.lr_scheduler import LinearLR, SequentialLR, ExponentialLR, ReduceLROnPlateau, CosineAnnealingLR
 import os
 from pytorch_lightning.tuner import Tuner
+
+def read_data(filename):
+    data = np.load(filename, allow_pickle=True)
+    return pd.DataFrame(data.tolist())
+
+def npy_preprocessor(filename):
+    df = read_data(filename)
+    # return df[df['chiral_centers'].apply(lambda x: len(x) == 1)].reset_index(drop=True)
+    return df
 
 
 def augment_data(X_train, y_train, num_samples, rotate_molecule_func):
