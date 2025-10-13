@@ -97,7 +97,7 @@ class ViTModule(pl.LightningModule):
                             mlp_dropout=mlp_dropout_rate,          
                             num_transformer_layers = 6, #L
                             num_heads = 6,     #table1
-                            mlp_size = 1024,     #table 1
+                            mlp_size = 1536,     #table 1
                             )
    
         self.criterion = nn.CrossEntropyLoss()
@@ -107,7 +107,7 @@ class ViTModule(pl.LightningModule):
         self.test_acc = Accuracy(task="multiclass", num_classes=2)
 
         self.validation_step_outputs = []
-
+        self.test_step_outputs = []
     def forward(self, x):
         return self.model(x)
 
@@ -151,11 +151,26 @@ class ViTModule(pl.LightningModule):
         
         preds = torch.argmax(logits, dim=1)
         self.test_acc(preds, y)
-
+        self.test_step_outputs.append({'preds': preds, 'labels': y})
+        
         self.log('test/loss', loss, on_epoch=True)
         self.log('test/acc', self.test_acc, on_epoch=True)
         return loss
+    def on_test_epoch_end(self):
+        # Aggregate predictions and labels from all test batches
+        all_preds = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
+        all_labels = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
 
+        self.log({
+            "test/confusion_matrix": wandb.plot.confusion_matrix(
+                preds=all_preds,
+                y_true=all_labels,
+                class_names=['Non-chiral', 'Chiral'] # Example class names
+            )
+        })
+
+        # Clear the outputs to free up memory
+        self.test_step_outputs.clear()
     def configure_optimizers(self):
   
         EPOCHS = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 30 
@@ -180,7 +195,7 @@ class ViTModule(pl.LightningModule):
         scheduler_decay = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.1,  # Decays to 10% of the initial LR
+            end_factor=0.01,  # Decays to 10% of the initial LR
             total_iters=(EPOCHS - decay_start_epoch)
         )
 
@@ -225,12 +240,11 @@ def find_optimal_lr(model: pl.LightningModule, datamodule: pl.LightningDataModul
 
 def main():
     pl.seed_everything(42)
-    TASK = 1
+    TASK = 0
 
-    EPOCHS = 10
+    EPOCHS = 20
     BATCH_SIZE = 512
-    AUGMENT_DATA = False
-    RECYCLE_SAMPLES = True 
+    AUGMENT_DATA = True
 
     emb_dim = 384
     emb_dropout = 0.05
@@ -239,20 +253,10 @@ def main():
     # 1. Load ALL data initially
     df = npy_preprocessor("qm9_filtered.npy")
     
-    # 2. Separate Task 1 data from Thrown Away data
-    task1_mask = df['chiral_centers'].apply(len)==1
+    X_task1 = df['xyz'].values 
+    y_task1 = (np.stack(df['rotation'].values)[:, 1] > 0).astype(int)
     
-    # Task 1 Data (Used for splitting and testing)
-    df_task1 = df[task1_mask]
-    X_task1 = df_task1['xyz'].values 
-    y_task1 = (np.stack(df_task1['rotation'].values)[:, 1] > 0).astype(int)
-    
-    df_thrown = df[~task1_mask]
-    X_thrown = df_thrown['xyz'].values
-    y_thrown = (np.stack(df_thrown['rotation'].values)[:, 1] > 0).astype(int) # Recalculate y for consistency
-    
-    print(f"Task 1 Samples: {len(X_task1)}")
-    print(f"Thrown Away Samples: {len(X_thrown)}")
+
     
     # 3. Perform the standard split on TASK 1 data only
     X_train_val, X_test, y_train_val, y_test = train_test_split(
@@ -263,11 +267,7 @@ def main():
     )
     
 
-    if RECYCLE_SAMPLES and len(X_thrown) > 0:
 
-        X_train = np.concatenate((X_train, X_thrown), axis=0)
-        y_train = np.concatenate((y_train, y_thrown), axis=0)
-    
 
     data_module = QMDataModule(
         X_train=X_train, Y_train=y_train, 
@@ -286,7 +286,7 @@ def main():
     trainer = pl.Trainer(
         max_epochs=EPOCHS,
         accelerator='auto',
-        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_recycle{RECYCLE_SAMPLES}_lr{optimal_lr:.1e}"),
+        logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_lr{optimal_lr:.1e}"),
         callbacks=[LearningRateMonitor(logging_interval='step')]
     )
     
