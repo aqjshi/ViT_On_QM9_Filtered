@@ -162,38 +162,36 @@ class ViTModule(pl.LightningModule):
         self.log('test/acc', self.test_acc, on_epoch=True)
         return loss
 
+    # In ViTModule.on_test_epoch_end:
     def on_test_epoch_end(self):
-        # --- EDIT 2: Aggregate, calculate, and log CM to WandB ---
+        all_preds = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
+        all_labels = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
         
-        # 1. Aggregate predictions and labels from all test batches
-        all_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
-        all_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
-
         # Check if logger is available before attempting to log to WandB
         if self.logger:
-             self.logger.experiment.log({
-                 "test/confusion_matrix": wandb.plot.confusion_matrix(
-                     preds=all_preds,
-                     y_true=all_labels,
-                     class_names=['Negative', 'Positive'] # Assuming these are your two classes
-                 ),
-                 "global_step": self.global_step 
-             })
+            self.logger.experiment.log({
+                "test/confusion_matrix": wandb.plot.confusion_matrix(
+                    preds=all_preds,
+                    y_true=all_labels,
+                    class_names=['Negative', 'Positive'] 
+                ),
+                "global_step": self.global_step 
+            })
 
         # Clear the outputs to free up memory
         self.test_step_outputs.clear()
+    
+    
+    
     def configure_optimizers(self):
   
         EPOCHS = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 30 
         
     
-        decay_start_epoch = int(EPOCHS / 2)
+        decay_start_epoch = int(EPOCHS / 4)
       
-        optimizer = torch.optim.AdamW(
-            params=self.parameters(), 
-            lr=self.hparams.learning_rate,
-            weight_decay=1e-4 
-        )
+        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=1e-4, eps=1e-7, 
+                                                    betas=(0.8, 0.99))
         
 
         scheduler_initial = LinearLR(
@@ -254,12 +252,12 @@ def main():
     pl.seed_everything(42)
     TASK = 1
 
-    EPOCHS = 30
+    EPOCHS = 20
     BATCH_SIZE = 512
     AUGMENT_DATA = True
     emb_dim = 384
-    emb_dropout = 0.05
-    mlp_dropout = 0.05 
+    emb_dropout = 0.1
+    mlp_dropout = 0.2 
     df = npy_preprocessor("qm9_filtered.npy")
     if TASK == 1:
         df = df[df['chiral_centers'].apply(len)==1]
@@ -284,6 +282,7 @@ def main():
         max_epochs=EPOCHS,
         accelerator='auto',
         logger=WandbLogger(project="ViT-Replication-QM9", name=f"yujun_TASK{TASK}_aug500k_embdrop{emb_dropout}_mlpdrop{mlp_dropout}_linear_l2decay"),
+        gradient_clip_val=0.5, 
         callbacks=[LearningRateMonitor(logging_interval='step')]
     )
     
