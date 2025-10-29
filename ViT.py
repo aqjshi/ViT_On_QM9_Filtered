@@ -14,9 +14,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from pytorch_lightning.tuner import Tuner
 import argparse 
-
-
-
+from torchmetrics import MeanAbsoluteError
+from sklearn.preprocessing import StandardScaler
+from pytorch_lightning.callbacks.callback import Callback
 
 def read_data(filename):
     data = np.load(filename, allow_pickle=True)
@@ -179,7 +179,7 @@ class ViT(nn.Module):
 
         # Concatenate the class token to the patch embedding
         x = torch.cat((class_token,x),dim=1)
-
+        x = x + self.position_embeddings
         # Run Emebdding dropout
         x = self.embedding_dropout(x)
 
@@ -279,42 +279,21 @@ def augment_data(X_train, y_train, num_samples):
         rotated_y.append(y_train[idx])
         rotated_X.append(aug2_molecule)
         rotated_y.append(y_train[idx])
-        
-    # Concatenate the original stacked data with the new augmented data
     X_augmented = np.concatenate((X_train_stacked, np.array(rotated_X)), axis=0)
     y_augmented = np.concatenate((y_train, np.array(rotated_y)), axis=0)
     
-    print("Augmentation complete.")
     return X_augmented, y_augmented
 
 
 class QMDataModule(pl.LightningDataModule):
-    def __init__(self, X, y, batch_size=64, augment=False, num_aug_samples=200_000):
+    def __init__(self, batch_size=64): 
         super().__init__()
-        self.X = X
-        self.y = y
         self.batch_size = batch_size
-        self.augment = augment
-        self.num_aug_samples = num_aug_samples
 
-    def setup(self, stage=None):
-        X_train_val, X_test, y_train_val, y_test = train_test_split(
-            self.X, self.y, test_size=0.2, random_state=43, stratify=self.y
-        )
-
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train_val, y_train_val, test_size=0.1, random_state=43, stratify=y_train_val
-        )
-        
-
-        if self.augment:
-            X_train, y_train = augment_data(X_train, y_train, self.num_aug_samples)
-
-
-        # Create the final datasets
-        self.train_dataset = MoleculeSequenceDataset(X_train, y_train)
-        self.val_dataset = MoleculeSequenceDataset(X_val, y_val)
-        self.test_dataset = MoleculeSequenceDataset(X_test, y_test)
+    def set_datasets(self, train_dataset, val_dataset, test_dataset):
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.test_dataset = test_dataset
 
 
     def train_dataloader(self):
@@ -325,23 +304,30 @@ class QMDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size * 2, num_workers=0)
+    
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0,weight_decay=1e-3): 
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+                 use_clamping: bool = False,
+                 clamp_range: float = 20.0, 
+                 weight_decay: float = 0.0):
         super().__init__()
         self.save_hyperparameters()
+        self.use_clamping = use_clamping # Store the flag
+        self.clamp_range = clamp_range   # Store the range
+        self.weight_decay = weight_decay   # Store the range
+
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
                          embedding_dropout=embedding_dropout_rate, 
                          mlp_dropout=mlp_dropout_rate, 
-                         
-                         # Use the variables passed from the constructor
+
                          num_transformer_layers = num_transformer_layers, 
                          num_heads = num_heads,
                          mlp_size = mlp_size
                          )
-   
+        self.scaler = scaler
         self.criterion = nn.BCEWithLogitsLoss()
         
         self.train_acc = Accuracy(task="binary")
@@ -427,7 +413,7 @@ class ViTModule(pl.LightningModule):
         optimizer = torch.optim.AdamW( 
             params=self.parameters(), 
             lr=self.hparams.learning_rate, 
-            weight_decay=self.hparams.weight_decay,  # <--- SUBSTITUTE HARDCODED VALUE HERE
+            weight_decay=self.hparams.weight_decay,  
             eps=1e-7, 
             betas=(0.8, 0.99)
         )
@@ -462,33 +448,47 @@ class ViTModule(pl.LightningModule):
             }
         }
 
-def find_optimal_lr(model: pl.LightningModule, datamodule: pl.LightningDataModule):
-    temp_trainer = pl.Trainer(
-        accelerator='auto',
-        logger=False,
-        enable_checkpointing=False
-    )
-    tuner = Tuner(temp_trainer)
-    lr_finder = tuner.lr_find(model, datamodule=datamodule)
-    suggested_lr = lr_finder.suggestion()
-    fig = lr_finder.plot(suggest=True)
-    fig.savefig(f"optl=r{suggested_lr}.png")
-    return suggested_lr
+class ThresholdStopper(Callback):
+    def __init__(self, monitor: str, threshold: float, check_epoch: int):
+        super().__init__()
+        self.monitor = monitor     # e.g., 'val/loss'
+        self.threshold = threshold # e.g., 0.65
+        self.check_epoch = check_epoch   # The epoch to check (1-indexed, e.g., 3)
 
+    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        if trainer.sanity_checking:
+            return
+        current_epoch_num = trainer.current_epoch + 1
+        if current_epoch_num == self.check_epoch:
+            current_metric = trainer.callback_metrics.get(self.monitor)
+            
+            if current_metric is None:
+                return # Metric not available
+
+            if current_metric > self.threshold:
+                print(f"\nTriggering stop at Epoch {current_epoch_num}: "
+                      f"{self.monitor} ({current_metric:.4f}) > {self.threshold}. "
+                      f"Stopping training.")
+                trainer.should_stop = True
 def main():
     pl.seed_everything(42)
- 
+
 
     parser = argparse.ArgumentParser(description=f'ViT-Replication-QM9')
     
     # Data and Training params
-    parser.add_argument('--TASK', type=int, default=0)
+    parser.add_argument('--TASK', type=int, default=1)
     parser.add_argument('--augment', type=lambda x: str(x).lower() == 'true', default=False)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--scheduler', type=lambda x: str(x).lower() == 'true', default=False)
     
+    parser.add_argument('--weight_decay', type=float, default=0.01) 
+    parser.add_argument('--grad_clip', type=float, default=1.0) 
+    parser.add_argument('--use_clamping', type=lambda x: str(x).lower() == 'true', default=False) # Used in ViTModule
+    parser.add_argument('--clamp_range', type=float, default=20.0)    # Used in ViTModule
+    parser.add_argument('--num_aug_samples', type=int, default=200_000) # Used in QMDataModule
     # Model architecture params
     parser.add_argument('--num_transformer_layers', type=int, default=6)
     parser.add_argument('--num_heads', type=int, default=6)
@@ -496,63 +496,138 @@ def main():
     parser.add_argument('--mlp_size', type=int, default=1024)
     parser.add_argument('--emb_dropout', type=float, default=0.1)
     parser.add_argument('--mlp_dropout', type=float, default=0.1)
-    parser.add_argument('--weight_decay', type=float, default=0.1)
-    parser.add_argument('--grad_clip', type=float, default=0.1)
     
     args = parser.parse_args()
-
-
-    wandb.init(project="ViT-Replication-QM9", config=args)
-    
-    # 2. Get the official config object (which includes the sweep parameters)
-    config = wandb.config
-    
-    # 3. NOW it is safe to read TASK and use it for filtering/logging
+    wandb.init(project="ViT-Replication-QM9-Task{TASK}", config=args)
+    config = wandb.config 
     TASK = config.TASK
-
-
     run_name = f"augment={config.augment}&epochs={config.epochs}&batch_size={config.batch_size}&lr={config.lr}&scheduler={config.scheduler}&num_transformer_layers={config.num_transformer_layers}&num_heads={config.num_heads}&emb_dim={config.emb_dim}&mlp_size={config.mlp_size}&emb_dropout={config.emb_dropout}&mlp_dropout={config.mlp_dropout}"
 
-    df = npy_preprocessor("qm9_filtered.npy")
+    df_full = npy_preprocessor("qm9_filtered.npy")
+    X_all = df_full['xyz'].values 
+    y_all = (np.stack(df_full['rotation'].values)[:, 1] > 0).astype(int)
+
     if TASK == 1:
-        df = df[df['chiral_centers'].apply(len)==1]
 
-    X = df['xyz'].values 
-    y = (np.stack(df['rotation'].values)[:, 1] > 0).astype(int)
-
-
-    data_module = QMDataModule(X, y, 
-                               batch_size=config.batch_size, 
-                               augment=config.augment)
+        task_mask = df_full['chiral_centers'].apply(len) == 1
+        
+        X_task = X_all[task_mask]
+        y_task = y_all[task_mask]
     
-    model = ViTModule(learning_rate=config.lr, 
-                      embedding_dim=config.emb_dim, 
-                      embedding_dropout_rate=config.emb_dropout, 
-                      mlp_dropout_rate=config.mlp_dropout,
-                      num_transformer_layers=config.num_transformer_layers,
-                      num_heads=config.num_heads,
-                      mlp_size=config.mlp_size)
+        X_recycled = X_all[~task_mask]
+        y_recycled = y_all[~task_mask]
+        print(f"Primary task samples: {len(X_task)}, Recycled samples: {len(X_recycled)}")
 
-    # optimal_lr = find_optimal_lr(model, data_module)
-    # model.hparams.learning_rate = optimal_lr
+    else:
+        X_task = X_all
+        y_task = y_all
+        X_recycled = np.array([]) 
+        y_recycled = np.array([])
+
+    X_train_val, X_test, y_train_val, y_test = train_test_split(
+        X_task, y_task, test_size=0.2, random_state=43
+    )
+    
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_val, y_train_val, test_size=0.1, random_state=43
+    )
+
+    X_train_coords_flat = np.concatenate(X_train)[:, :3]
+    x_coord_scaler = StandardScaler()
+    x_coord_scaler.fit(X_train_coords_flat) 
+    
+    def scale_x_coordinates(X_split, scaler):
+        if len(X_split) == 0:
+            return []
+            
+        X_stacked = np.stack(X_split) 
+        
+        coords = X_stacked[:, :, :3]
+        features = X_stacked[:, :, 3:]
+        
+        coords_scaled_flat = scaler.transform(coords.reshape(-1, 3))
+        coords_scaled = coords_scaled_flat.reshape(X_stacked.shape[0], X_stacked.shape[1], 3)
+        
+        X_scaled_stacked = np.concatenate((coords_scaled, features), axis=2)
+        
+        return [X_scaled_stacked[i, ...] for i in range(X_scaled_stacked.shape[0])]
+    
+    X_train_scaled = scale_x_coordinates(X_train, x_coord_scaler)
+    X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
+    X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
+    X_recycled_scaled = scale_x_coordinates(X_recycled, x_coord_scaler) # Scale recycled data
+
+    X_train_combined = X_train_scaled + X_recycled_scaled
+
+    y_train_combined = np.concatenate((y_train, y_recycled))
+
+    print(f"Final training set size: {len(X_train_combined)}")
+    print(f"Final validation set size: {len(X_val_scaled)}")
+    print(f"Final test set size: {len(X_test_scaled)}")
+
+    if config.augment:
+
+        print(f"Starting augmentation of {len(X_train_combined)} samples to add {config.num_aug_samples} new ones.")
+        X_train_aug, y_train_aug = augment_data(
+            X_train_combined, 
+            y_train_combined,
+            config.num_aug_samples
+        )
+    else:
+        X_train_aug = X_train_combined
+        y_train_aug = y_train_combined
+        
+
+    train_dataset = MoleculeSequenceDataset(X_train_aug, y_train_aug)
+    val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val) 
+    test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test)
+
+    
+    
+    data_module = QMDataModule(batch_size=config.batch_size) 
+
+    data_module.set_datasets(train_dataset, val_dataset, test_dataset)
+
+
+    model = ViTModule(learning_rate=config.lr, 
+                        embedding_dim=config.emb_dim, 
+                        embedding_dropout_rate=config.emb_dropout, 
+                        mlp_dropout_rate=config.mlp_dropout,
+                        num_transformer_layers=config.num_transformer_layers,
+                        num_heads=config.num_heads,
+                        mlp_size=config.mlp_size,
+                        scaler=None, 
+                        use_clamping=config.use_clamping,
+                        clamp_range=config.clamp_range,
+                        weight_decay=config.weight_decay 
+                        )
 
     early_stop_callback = EarlyStopping(
-        monitor='val/loss',  # Metric to monitor (your validation loss)
-        min_delta=0.00,      # Minimum change to qualify as an improvement (default is usually fine)
-        patience=3,          # Number of epochs with no improvement after which training will be stopped
+        monitor='val/loss', 
+        min_delta=0.00, 
+        patience=3, 
         verbose=False,
-        mode='min'           # Stop when the monitored quantity stops decreasing
+        mode='min' 
+    )
+
+    epoch_3_stopper = ThresholdStopper(
+        monitor='val/loss_epoch',
+        threshold=0.68, 
+        check_epoch=2    
     )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
+        num_sanity_val_steps=0, 
         max_epochs=config.epochs, 
         accelerator='auto',
-        logger=wandb_logger,      
+        logger=wandb_logger, 
         gradient_clip_val=config.grad_clip, 
         callbacks=[
             LearningRateMonitor(logging_interval='step'),
-            early_stop_callback  
+            early_stop_callback, 
+            epoch_3_stopper  # <-- Use the new callback
         ]
     )
     
@@ -563,4 +638,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-
