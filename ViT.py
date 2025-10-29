@@ -4,7 +4,7 @@ import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from torchmetrics import Accuracy
 from tqdm import tqdm
 import numpy as np
@@ -328,7 +328,7 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0,weight_decay=1e-3): 
         super().__init__()
         self.save_hyperparameters()
         self.model = ViT(embedding_dim=embedding_dim, 
@@ -424,8 +424,15 @@ class ViTModule(pl.LightningModule):
         decay_start_epoch = int(EPOCHS * .2)
       
    
-        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=1e-3, eps=1e-7, 
-                                                    betas=(0.8, 0.99))
+        optimizer = torch.optim.AdamW( 
+            params=self.parameters(), 
+            lr=self.hparams.learning_rate, 
+            weight_decay=self.hparams.weight_decay,  # <--- SUBSTITUTE HARDCODED VALUE HERE
+            eps=1e-7, 
+            betas=(0.8, 0.99)
+        )
+
+
         scheduler_initial = LinearLR(
             optimizer, 
             start_factor=1.0, 
@@ -470,11 +477,12 @@ def find_optimal_lr(model: pl.LightningModule, datamodule: pl.LightningDataModul
 
 def main():
     pl.seed_everything(42)
-    TASK = 0
+ 
 
-    parser = argparse.ArgumentParser(description=f'ViT-Replication-QM9-Task{TASK}')
+    parser = argparse.ArgumentParser(description=f'ViT-Replication-QM9')
     
     # Data and Training params
+    parser.add_argument('--TASK', type=int, default=0)
     parser.add_argument('--augment', type=lambda x: str(x).lower() == 'true', default=False)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=512)
@@ -488,10 +496,21 @@ def main():
     parser.add_argument('--mlp_size', type=int, default=1024)
     parser.add_argument('--emb_dropout', type=float, default=0.1)
     parser.add_argument('--mlp_dropout', type=float, default=0.1)
+    parser.add_argument('--weight_decay', type=float, default=0.1)
+    parser.add_argument('--grad_clip', type=float, default=0.1)
     
     args = parser.parse_args()
-    wandb.init(project="csc277_hw1_qshi10_p2", config=args)
-    config = wandb.config 
+
+
+    wandb.init(project="ViT-Replication-QM9", config=args)
+    
+    # 2. Get the official config object (which includes the sweep parameters)
+    config = wandb.config
+    
+    # 3. NOW it is safe to read TASK and use it for filtering/logging
+    TASK = config.TASK
+
+
     run_name = f"augment={config.augment}&epochs={config.epochs}&batch_size={config.batch_size}&lr={config.lr}&scheduler={config.scheduler}&num_transformer_layers={config.num_transformer_layers}&num_heads={config.num_heads}&emb_dim={config.emb_dim}&mlp_size={config.mlp_size}&emb_dropout={config.emb_dropout}&mlp_dropout={config.mlp_dropout}"
 
     df = npy_preprocessor("qm9_filtered.npy")
@@ -517,15 +536,24 @@ def main():
     # optimal_lr = find_optimal_lr(model, data_module)
     # model.hparams.learning_rate = optimal_lr
 
-
+    early_stop_callback = EarlyStopping(
+        monitor='val/loss',  # Metric to monitor (your validation loss)
+        min_delta=0.00,      # Minimum change to qualify as an improvement (default is usually fine)
+        patience=3,          # Number of epochs with no improvement after which training will be stopped
+        verbose=False,
+        mode='min'           # Stop when the monitored quantity stops decreasing
+    )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
         max_epochs=config.epochs, 
         accelerator='auto',
         logger=wandb_logger,      
-        gradient_clip_val=1.0, 
-        callbacks=[LearningRateMonitor(logging_interval='step')]
+        gradient_clip_val=config.grad_clip, 
+        callbacks=[
+            LearningRateMonitor(logging_interval='step'),
+            early_stop_callback  
+        ]
     )
     
     trainer.fit(model, datamodule=data_module)
