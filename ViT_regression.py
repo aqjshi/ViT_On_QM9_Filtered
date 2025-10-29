@@ -1,3 +1,4 @@
+
 import torch
 from torch import nn
 import pandas as pd
@@ -14,9 +15,9 @@ from sklearn.metrics import accuracy_score, f1_score
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from pytorch_lightning.tuner import Tuner
 import argparse 
-
-
-
+from torchmetrics import MeanAbsoluteError
+from sklearn.preprocessing import StandardScaler
+from numpy import asinh, sinh
 
 def read_data(filename):
     data = np.load(filename, allow_pickle=True)
@@ -205,7 +206,7 @@ class MoleculeSequenceDataset(Dataset):
 
     def __getitem__(self, idx):
         molecule = self.X[idx]
-        return torch.tensor(molecule, dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.long)
+        return torch.tensor(molecule, dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32)
 
 def rotate_molecule(xyz_data, angle, axis='z'):
     """Rotate the first 3 columns (x, y, z) around the chosen axis by 'angle'."""
@@ -248,18 +249,18 @@ def translate_molecule(xyz_data, magnitude=0.02):
     translated_xyz_data = np.hstack((translated_coords, other_feats))  # Still (27,8)
     return translated_xyz_data
 
-def reflect_molecule(xyz_data):
-    """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
-    reflection_matrix = np.eye(3)
-    random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
-    reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
+# def reflect_molecule(xyz_data):
+#     """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
+#     reflection_matrix = np.eye(3)
+#     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
+#     reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
 
-    coords_3d = xyz_data[:, :3]    # (27,3)
-    other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
-    reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
+#     coords_3d = xyz_data[:, :3]    # (27,3)
+#     other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
+#     reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
 
-    reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
-    return reflected_xyz_data
+#     reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
+#     return reflected_xyz_data
 
 def augment_data(X_train, y_train, num_samples):
     X_train_stacked = np.stack(X_train)
@@ -289,28 +290,28 @@ def augment_data(X_train, y_train, num_samples):
 
 
 class QMDataModule(pl.LightningDataModule):
-    def __init__(self, X, y, batch_size=64, augment=False, num_aug_samples=200_000):
+    def __init__(self, X, y, batch_size=64, augment=False, num_aug_samples=200_000, scaler=None):
         super().__init__()
         self.X = X
         self.y = y
         self.batch_size = batch_size
         self.augment = augment
         self.num_aug_samples = num_aug_samples
-
+        self.scaler = scaler 
     def setup(self, stage=None):
         X_train_val, X_test, y_train_val, y_test = train_test_split(
-            self.X, self.y, test_size=0.2, random_state=43, stratify=self.y
+            self.X, self.y, test_size=0.2, random_state=43
         )
 
+        # y_train_val is now the SCALED version of the training target data.
         X_train, X_val, y_train, y_val = train_test_split(
-            X_train_val, y_train_val, test_size=0.1, random_state=43, stratify=y_train_val
+            X_train_val, y_train_val, test_size=0.1, random_state=43
         )
-        
 
         if self.augment:
+            # If augmentation involves y, y_train must be unscaled before augmentation,
             X_train, y_train = augment_data(X_train, y_train, self.num_aug_samples)
-
-
+        
         # Create the final datasets
         self.train_dataset = MoleculeSequenceDataset(X_train, y_train)
         self.val_dataset = MoleculeSequenceDataset(X_val, y_val)
@@ -328,9 +329,14 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+                 use_clamping: bool = False,
+                 clamp_range: float = 20.0):
         super().__init__()
         self.save_hyperparameters()
+        self.use_clamping = use_clamping # Store the flag
+        self.clamp_range = clamp_range   # Store the range
+
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
                          embedding_dropout=embedding_dropout_rate, 
@@ -341,12 +347,12 @@ class ViTModule(pl.LightningModule):
                          num_heads = num_heads,
                          mlp_size = mlp_size
                          )
-   
-        self.criterion = nn.BCEWithLogitsLoss()
+        self.scaler = scaler
+        self.criterion = nn.MSELoss()
         
-        self.train_acc = Accuracy(task="binary")
-        self.val_acc = Accuracy(task="binary")
-        self.test_acc = Accuracy(task="binary")
+        self.train_mae = MeanAbsoluteError()
+        self.val_mae = MeanAbsoluteError()
+        self.test_mae = MeanAbsoluteError()
 
         self.validation_step_outputs = []
         self.test_step_outputs = []
@@ -358,64 +364,88 @@ class ViTModule(pl.LightningModule):
         x, y = batch
         logits = self(x)
         
-        # BCE target must be float and logits must be squeezed to (batch_size,)
-        loss = self.criterion(logits.squeeze(1), y.float()) 
-    
-        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
-        self.train_acc(preds, y)
+        # FIX 1: Squeeze y for consistent shape with logits.squeeze(1) for MSE loss
+        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
         
+        self.train_mae(logits.squeeze(1), y.squeeze(1))
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/acc', self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('train/scaled_mae', self.train_mae, on_step=False, on_epoch=True, prog_bar=True) 
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.criterion(logits.squeeze(1), y.float()) 
-        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
-        self.val_acc(preds, y)
-
-        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('val/acc', self.val_acc, on_epoch=True)
-        self.validation_step_outputs.append({'preds': preds, 'labels': y})
+        
+        # FIX 1: Squeeze y for consistent shape with logits.squeeze(1) for MSE loss
+        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
+        
+        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True) 
+        self.validation_step_outputs.append({'preds': logits.squeeze(1), 'labels': y.squeeze(1)}) 
         return loss
     
-    
     def on_validation_epoch_end(self):
-   
-        all_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
-        all_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
-        
-        f1 = f1_score(all_labels, all_preds, average='weighted')
-        self.log('val/f1_score', f1)
-        self.validation_step_outputs.clear()
+        all_scaled_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
+        all_scaled_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
+        self.validation_step_outputs.clear() 
+
+        if self.use_clamping:
+            # Conditional Clamping: Cap extreme predictions in the scaled space
+            all_scaled_preds = np.clip(all_scaled_preds, 
+                                       -self.clamp_range, 
+                                        self.clamp_range) 
+
+        if self.scaler:
+            # FIX 1: Add sinh() to inverse transform prediction
+            unscaled_preds = sinh(self.scaler.inverse_transform(all_scaled_preds.reshape(-1, 1))).flatten()
+            
+            # FIX 2: Add sinh() to inverse transform labels
+            unscaled_labels = sinh(self.scaler.inverse_transform(all_scaled_labels.reshape(-1, 1))).flatten()
+            
+            unscaled_mae = np.abs(unscaled_preds - unscaled_labels).mean()
+            self.log('val/mae', unscaled_mae, on_epoch=True, prog_bar=True)
+        else:
+            unscaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
+            self.log('val/mae', unscaled_mae, on_epoch=True, prog_bar=True)
+
+    def on_test_epoch_end(self):
+        all_scaled_preds = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
+        all_scaled_labels = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
+        self.test_step_outputs.clear() 
+
+        if self.use_clamping:
+            # Conditional Clamping: Cap extreme predictions in the scaled space
+            all_scaled_preds = np.clip(all_scaled_preds, 
+                                       -self.clamp_range, 
+                                        self.clamp_range) 
+
+        if self.scaler:
+            # FIX 1: Add sinh() to inverse transform prediction
+            unscaled_preds = sinh(self.scaler.inverse_transform(all_scaled_preds.reshape(-1, 1))).flatten()
+            
+            # FIX 2: Add sinh() to inverse transform labels
+            unscaled_labels = sinh(self.scaler.inverse_transform(all_scaled_labels.reshape(-1, 1))).flatten()
+            
+            unscaled_mae = np.abs(unscaled_preds - unscaled_labels).mean()
+            self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
+        else:
+            unscaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
+            self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
+    
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.criterion(logits.squeeze(1), y.float()) 
         
-        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
-        self.test_acc(preds, y)
-        self.test_step_outputs.append({'preds': preds, 'labels': y})
+        # FIX 1: Squeeze y for consistent shape with logits.squeeze(1) for MSE loss
+        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
+        
+        self.test_mae(logits.squeeze(1), y.squeeze(1)) 
         
         self.log('test/loss', loss, on_epoch=True)
-        self.log('test/acc', self.test_acc, on_epoch=True)
+        self.log('test/mae', self.test_mae, on_epoch=True)
+        self.test_step_outputs.append({'preds': logits.squeeze(1), 'labels': y.squeeze(1)}) 
         return loss
     
-
-    def on_test_epoch_end(self):
-        all_preds = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
-        all_labels = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
-        if self.logger:
-            self.logger.experiment.log({
-                "test/confusion_matrix": wandb.plot.confusion_matrix(
-                    preds=all_preds,
-                    y_true=all_labels,
-                    class_names=['Negative', 'Positive'] 
-                ),
-                "global_step": self.global_step 
-            })
-        self.test_step_outputs.clear()
+        
 
 
     def configure_optimizers(self):
@@ -470,9 +500,9 @@ def find_optimal_lr(model: pl.LightningModule, datamodule: pl.LightningDataModul
 
 def main():
     pl.seed_everything(42)
-    TASK = 0
+    TASK = 1
 
-    parser = argparse.ArgumentParser(description=f'ViT-Replication-QM9-Task{TASK}')
+    parser = argparse.ArgumentParser(description=f'ViT-Replication-QM9-Regression-Task{TASK}')
     
     # Data and Training params
     parser.add_argument('--augment', type=lambda x: str(x).lower() == 'true', default=False)
@@ -499,12 +529,81 @@ def main():
         df = df[df['chiral_centers'].apply(len)==1]
 
     X = df['xyz'].values 
-    y = (np.stack(df['rotation'].values)[:, 1] > 0).astype(int)
+    y_full = asinh((np.stack(df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
 
+    # --- 2. X and Y Split ---
+    # Split 1: Separate the Test set (20%)
+    X_train_val, X_test, y_train_val_asinh, y_test_asinh = train_test_split(
+        X, y_full, test_size=0.2, random_state=43
+    )
+    
+    # Split 2: Separate Train (90%) and Validation (10% of the remaining 80%)
+    X_train, X_val, y_train_asinh, y_val_asinh = train_test_split(
+        X_train_val, y_train_val_asinh, test_size=0.1, random_state=43
+    )
 
-    data_module = QMDataModule(X, y, 
+    # --- 3. X-Input Scaling (Coordinates ONLY) ---
+    # The coordinate data is in columns 0, 1, 2 of the (27, 8) arrays.
+    X_train_coords_flat = np.concatenate(X_train)[:, :3]
+    
+    x_coord_scaler = StandardScaler()
+    x_coord_scaler.fit(X_train_coords_flat) 
+    
+    # Define a helper function to apply the scaler and keep other features untouched
+    def scale_x_coordinates(X_split, scaler):
+        X_stacked = np.stack(X_split) 
+        
+        # Isolate coordinates (columns 0:3) and non-coordinate features (columns 3:)
+        coords = X_stacked[:, :, :3]
+        features = X_stacked[:, :, 3:]
+        
+        # Flatten coordinates: (N*27, 3), transform, then reshape back to (N, 27, 3)
+        coords_scaled_flat = scaler.transform(coords.reshape(-1, 3))
+        coords_scaled = coords_scaled_flat.reshape(X_stacked.shape[0], X_stacked.shape[1], 3)
+        
+        # Recombine scaled coordinates and original features
+        X_scaled_stacked = np.concatenate((coords_scaled, features), axis=2)
+        
+        # Convert back to array of arrays for the Dataset constructor
+        return [X_scaled_stacked[i, ...] for i in range(X_scaled_stacked.shape[0])]
+    
+    # Apply X scaling to all splits
+    X_train_scaled = scale_x_coordinates(X_train, x_coord_scaler)
+    X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
+    X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
+    y_stats = y_train_asinh.flatten()
+    print("\n--- STATS FOR y_train_asinh (BEFORE StandardScaler) ---")
+    print(f"Min:    {np.min(y_stats):.4f}")
+    print(f"Max:    {np.max(y_stats):.4f}")
+    print(f"Mean:   {np.mean(y_stats):.4f}")
+    print(f"Std Dev:{np.std(y_stats):.4f}")
+    print(f"Median: {np.median(y_stats):.4f}")
+    print("------------------------------------------------------\n")
+    # --- 4. Y-Target Transformation ---
+    y_scaler = StandardScaler()
+    y_scaler.fit(y_train_asinh)
+    
+    y_train_scaled = y_scaler.transform(y_train_asinh).flatten()
+    y_val_scaled = y_scaler.transform(y_val_asinh).flatten()
+    y_test_scaled = y_scaler.transform(y_test_asinh).flatten()
+    
+    # --- 5. Handle Data Augmentation and Final DataModule Setup ---
+    if config.augment:
+        X_train_aug, y_train_scaled_aug = augment_data(X_train_scaled, y_train_scaled, config.num_aug_samples)
+    else:
+        X_train_aug = X_train_scaled
+        y_train_scaled_aug = y_train_scaled
+
+    # 6. Initialize DataModule and Model
+    # We pass the UNscaled data/dummy data to the constructor, but assign the scaled data to datasets
+    data_module = QMDataModule(X, y_full, 
                                batch_size=config.batch_size, 
-                               augment=config.augment)
+                               augment=config.augment,
+                               scaler=y_scaler) # Pass Y scaler only
+
+    data_module.train_dataset = MoleculeSequenceDataset(X_train_aug, y_train_scaled_aug)
+    data_module.val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val_scaled)
+    data_module.test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test_scaled)
     
     model = ViTModule(learning_rate=config.lr, 
                       embedding_dim=config.emb_dim, 
@@ -512,13 +611,14 @@ def main():
                       mlp_dropout_rate=config.mlp_dropout,
                       num_transformer_layers=config.num_transformer_layers,
                       num_heads=config.num_heads,
-                      mlp_size=config.mlp_size)
+                      mlp_size=config.mlp_size,
+                      scaler=y_scaler, 
+                    use_clamping=config.use_clamping,
+                      clamp_range=config.clamp_range)
+              
+    # ... (Trainer execution remains the same)
 
-    # optimal_lr = find_optimal_lr(model, data_module)
-    # model.hparams.learning_rate = optimal_lr
-
-
-    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
+    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
         max_epochs=config.epochs, 
@@ -535,4 +635,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-
