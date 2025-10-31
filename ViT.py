@@ -613,8 +613,8 @@ def main():
 
     epoch_3_stopper = ThresholdStopper(
         monitor='val/loss_epoch',
-        threshold=0.68, 
-        check_epoch=2    
+        threshold=0.55, 
+        check_epoch=3    
     )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
 
