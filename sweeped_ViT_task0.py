@@ -658,8 +658,8 @@ def main():
         gradient_clip_val=config.grad_clip, 
         callbacks=[
             LearningRateMonitor(logging_interval='step'),
-            early_stop_callback, 
-            epoch_3_stopper  # <-- Use the new callback
+            # early_stop_callback, 
+            # epoch_3_stopper  # <-- Use the new callback
         ]
     )
     
