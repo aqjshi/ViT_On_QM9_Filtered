@@ -1,6 +1,6 @@
 name: sweep
 program: sweep.bat
-project: ViT-Replication-QM9-Task1
+project: ViT-Replication-QM9-Task0
 method: bayes
 metric:
   name: val/loss
@@ -8,7 +8,7 @@ metric:
 
 parameters:
   TASK:
-    value: 1
+    value: 0
   augment: 
     value: False
   epochs:
@@ -26,31 +26,31 @@ parameters:
     
   emb_dropout:
     distribution: uniform
-    min: 0.4
+    min: 0.1
     max: 0.5
 
   mlp_dropout:
     distribution: uniform
-    min: 0.4
+    min: 0.1
     max: 0.5
 
   num_transformer_layers:
     distribution: categorical 
-    values: [6]
+    values: [4, 6, 8 ]
   num_heads:
     distribution: categorical 
-    values: [4]
+    values: [4, 8]
   emb_dim:
     distribution: categorical 
-    values: [192, 384]
+    values: [192, 384, 768]
   mlp_size:
     distribution: categorical 
-    values: [512, 1024]
+    values: [512, 768, 1024]
 
   grad_clip:
     distribution: uniform
     min: 0.1
-    max: 0.5
+    max: 0.9
 
   weight_decay:
     distribution: log_uniform_values  
