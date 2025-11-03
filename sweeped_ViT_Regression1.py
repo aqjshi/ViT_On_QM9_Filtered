@@ -1,11 +1,10 @@
-
 import torch
 from torch import nn
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from torchmetrics import Accuracy
 from tqdm import tqdm
 import numpy as np
@@ -16,7 +15,8 @@ from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from pytorch_lightning.tuner import Tuner
 import argparse 
 from torchmetrics import MeanAbsoluteError
-from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler
+from pytorch_lightning.callbacks.callback import Callback
 
 def read_data(filename):
     data = np.load(filename, allow_pickle=True)
@@ -138,7 +138,7 @@ class ViT(nn.Module):
                attn_dropout: int = 0,
                mlp_dropout: float = 0.1,
                embedding_dropout: float = 0.1,
-               num_classes: int = 1):
+               num_classes: int = 2):
         super().__init__()
         self.num_patches = 27
         self.class_embeddings = nn.Parameter(torch.randn(1,1,embedding_dim), requires_grad=True)
@@ -179,7 +179,7 @@ class ViT(nn.Module):
 
         # Concatenate the class token to the patch embedding
         x = torch.cat((class_token,x),dim=1)
-
+        # x = x + self.position_embeddings
         # Run Emebdding dropout
         x = self.embedding_dropout(x)
 
@@ -205,7 +205,7 @@ class MoleculeSequenceDataset(Dataset):
 
     def __getitem__(self, idx):
         molecule = self.X[idx]
-        return torch.tensor(molecule, dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32)
+        return torch.tensor(molecule, dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.long)
 
 def rotate_molecule(xyz_data, angle, axis='z'):
     """Rotate the first 3 columns (x, y, z) around the chosen axis by 'angle'."""
@@ -235,31 +235,32 @@ def rotate_molecule(xyz_data, angle, axis='z'):
     rotated_xyz_data = np.hstack((rotated_coords, other_feats))  # Still (27,8)
     return rotated_xyz_data
 
-def translate_molecule(xyz_data, magnitude=0.02):
-    """Translate the first 3 columns (x, y, z) by a random magnitude along a random axis."""
-    translation_vector = np.zeros(3)
+def translate_molecule(xyz_data):
+    translationx_value = np.random.normal(0, 0.002)
+    translationy_value = np.random.normal(0, 0.002)
+    translationz_value = np.random.normal(0, 0.002)
+
+    translation_vector = np.array([translationx_value, translationy_value, translationz_value])
+    
+    coords_3d = xyz_data[:, :3]      # (27,3)
+    other_feats = xyz_data[:, 3:]    # (27,5) or however many remain
+    
+    translated_coords = coords_3d + translation_vector 
+    
+    translated_xyz_data = np.hstack((translated_coords, other_feats))
+    return translated_xyz_data
+def reflect_molecule(xyz_data):
+    """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
+    reflection_matrix = np.eye(3)
     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
-    translation_vector[random_axis] = magnitude
+    reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
 
     coords_3d = xyz_data[:, :3]    # (27,3)
     other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
-    translated_coords = coords_3d + translation_vector  # Apply translation
+    reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
 
-    translated_xyz_data = np.hstack((translated_coords, other_feats))  # Still (27,8)
-    return translated_xyz_data
-
-# def reflect_molecule(xyz_data):
-#     """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
-#     reflection_matrix = np.eye(3)
-#     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
-#     reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
-
-#     coords_3d = xyz_data[:, :3]    # (27,3)
-#     other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
-#     reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
-
-#     reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
-#     return reflected_xyz_data
+    reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
+    return reflected_xyz_data
 
 def augment_data(X_train, y_train, num_samples):
     X_train_stacked = np.stack(X_train)
@@ -279,192 +280,129 @@ def augment_data(X_train, y_train, num_samples):
         rotated_y.append(y_train[idx])
         rotated_X.append(aug2_molecule)
         rotated_y.append(y_train[idx])
-        
-    # Concatenate the original stacked data with the new augmented data
     X_augmented = np.concatenate((X_train_stacked, np.array(rotated_X)), axis=0)
     y_augmented = np.concatenate((y_train, np.array(rotated_y)), axis=0)
     
-    print("Augmentation complete.")
     return X_augmented, y_augmented
 
 
 class QMDataModule(pl.LightningDataModule):
-    def __init__(self, X, y, batch_size=64, augment=False, num_aug_samples=200_000, scaler=None):
+    def __init__(self, batch_size=64): 
         super().__init__()
-        self.X = X
-        self.y = y
         self.batch_size = batch_size
-        self.augment = augment
-        self.num_aug_samples = num_aug_samples
-        self.scaler = scaler 
-    def setup(self, stage=None):
-        X_train_val, X_test, y_train_val, y_test = train_test_split(
-            self.X, self.y, test_size=0.2, random_state=43
-        )
 
-        # y_train_val is now the SCALED version of the training target data.
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train_val, y_train_val, test_size=0.1, random_state=43
-        )
-
-        if self.augment:
-            # If augmentation involves y, y_train must be unscaled before augmentation,
-            X_train, y_train = augment_data(X_train, y_train, self.num_aug_samples)
-        
-        # Create the final datasets
-        self.train_dataset = MoleculeSequenceDataset(X_train, y_train)
-        self.val_dataset = MoleculeSequenceDataset(X_val, y_val)
-        self.test_dataset = MoleculeSequenceDataset(X_test, y_test)
+    def set_datasets(self, train_dataset, val_dataset, test_dataset):
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.test_dataset = test_dataset
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, persistent_workers=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size * 2, num_workers=0)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size * 2, num_workers=4, persistent_workers=True)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size * 2, num_workers=0)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size * 2, num_workers=4)
     
-
-
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
                  use_clamping: bool = False,
-                 clamp_range: float = 20.0):
+                 clamp_range: float = 20.0, 
+                 weight_decay: float = 0.0):
         super().__init__()
         self.save_hyperparameters()
         self.use_clamping = use_clamping # Store the flag
         self.clamp_range = clamp_range   # Store the range
+        self.weight_decay = weight_decay   # Store the range
 
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
                          embedding_dropout=embedding_dropout_rate, 
                          mlp_dropout=mlp_dropout_rate, 
-                         
-                         # Use the variables passed from the constructor
+
                          num_transformer_layers = num_transformer_layers, 
                          num_heads = num_heads,
                          mlp_size = mlp_size
                          )
         self.scaler = scaler
-        self.criterion =  nn.HuberLoss(delta=1.0) #
-        #  self.criterion =   nn.MSELoss()
+        self.criterion = nn.BCEWithLogitsLoss()
         
-        self.train_mae = MeanAbsoluteError()
-        self.val_mae = MeanAbsoluteError()
-        self.test_mae = MeanAbsoluteError()
+        self.train_acc = Accuracy(task="binary")
+        self.val_acc = Accuracy(task="binary")
+        self.test_acc = Accuracy(task="binary")
 
         self.validation_step_outputs = []
         self.test_step_outputs = []
-        self.OVERFLOW_CLIP_VAL = 5
+    
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
         
-        self.train_mae(logits.squeeze(1), y.squeeze(1))
+        # BCE target must be float and logits must be squeezed to (batch_size,)
+        loss = self.criterion(logits.squeeze(1), y.float()) 
+    
+        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
+        self.train_acc(preds, y)
+        
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/scaled_mae', self.train_mae, on_step=False, on_epoch=True, prog_bar=True) 
+        self.log('train/acc', self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
-        
-        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True) 
-        self.validation_step_outputs.append({'preds': logits.squeeze(1), 'labels': y.squeeze(1)}) 
+        loss = self.criterion(logits.squeeze(1), y.float()) 
+        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
+        self.val_acc(preds, y)
+
+        self.log('val/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('val/acc', self.val_acc, on_epoch=True)
+        self.validation_step_outputs.append({'preds': preds, 'labels': y})
         return loss
     
+    
     def on_validation_epoch_end(self):
-        # Prevent errors on sanity check
-        if not self.validation_step_outputs:
-            return
-
-        all_scaled_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
-        all_scaled_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
-        self.validation_step_outputs.clear() 
-
-        if self.use_clamping:
-            all_scaled_preds = np.clip(all_scaled_preds, 
-                                       -self.clamp_range, 
-                                        self.clamp_range) 
-
-
-        scaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
-        self.log('val/scaled_mae', scaled_mae, on_epoch=True, prog_bar=True)
-        unscaled_preds = self.scaler.inverse_transform(all_scaled_preds.reshape(-1, 1)).flatten()
-        unscaled_labels = self.scaler.inverse_transform(all_scaled_labels.reshape(-1, 1)).flatten()
-        
-        # This is now the correct unscaled MAE
-        unscaled_mae = np.abs(unscaled_preds - unscaled_labels).mean()
-        self.log('val/mae', unscaled_mae, on_epoch=True, prog_bar=True)
-
-
-    def on_test_epoch_end(self):
-        # Prevent errors
-        if not self.test_step_outputs:
-            return
-
-        all_scaled_preds_flat = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
-        all_scaled_labels_flat = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
-        self.test_step_outputs.clear() 
-
-        if self.use_clamping:
-             all_scaled_preds_flat = np.clip(all_scaled_preds_flat, 
-                                        -self.clamp_range, 
-                                         self.clamp_range) 
-
-        scaled_mae_epoch = np.abs(all_scaled_preds_flat - all_scaled_labels_flat).mean()
-    
-        self.log('test/scaled_mae', scaled_mae_epoch, on_epoch=True, prog_bar=True)
    
-
-        unscaled_preds = all_scaled_preds_flat.reshape(-1, 1).flatten()
-        unscaled_labels = self.scaler.transform(all_scaled_labels_flat.reshape(-1, 1)).flatten()
+        all_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
+        all_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
         
-
-        unscaled_mae = np.abs(unscaled_preds - unscaled_labels).mean()
-        self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
-
-        # This print logic will now show correct unscaled values
-        print("\n" + "="*80)
-        print("🧪 TEST SET SAMPLE PREDICTIONS vs. TRUE VALUES (Unscaled)")
-        
-        sample_data = {
-            'True Value (y)': unscaled_labels[:20],       # Now correct
-            'Prediction (y_hat)': unscaled_preds[:20],   # Now correct
-            'Scaled Error (a.u.)': np.abs(all_scaled_preds_flat[:20] - all_scaled_labels_flat[:20]),
-        }
-        df_sample = pd.DataFrame(sample_data)
-        
-        print(df_sample.to_string(float_format="{:.4f}".format))
-        print("="*80 + "\n")
-    
-
+        f1 = f1_score(all_labels, all_preds, average='weighted')
+        self.log('val/f1_score', f1)
+        self.validation_step_outputs.clear()
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-  
-        loss = self.criterion(logits.squeeze(1), y.squeeze(1)) 
+        loss = self.criterion(logits.squeeze(1), y.float()) 
         
-        self.test_mae(logits.squeeze(1), y.squeeze(1)) 
+        preds = (torch.sigmoid(logits.squeeze(1)) > 0.5).int()
+        self.test_acc(preds, y)
+        self.test_step_outputs.append({'preds': preds, 'labels': y})
         
         self.log('test/loss', loss, on_epoch=True)
-        
-        # *** FIX: Log as 'test/scaled_mae' for consistency ***
-        self.log('test/scaled_mae', self.test_mae, on_epoch=True, prog_bar=True) 
-        
-        self.test_step_outputs.append({'preds': logits.squeeze(1), 'labels': y.squeeze(1)}) 
+        self.log('test/acc', self.test_acc, on_epoch=True)
         return loss
     
-        
+
+    def on_test_epoch_end(self):
+        all_preds = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
+        all_labels = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
+        if self.logger:
+            self.logger.experiment.log({
+                "test/confusion_matrix": wandb.plot.confusion_matrix(
+                    preds=all_preds,
+                    y_true=all_labels,
+                    class_names=['Negative', 'Positive'] 
+                ),
+                "global_step": self.global_step 
+            })
+        self.test_step_outputs.clear()
 
 
     def configure_optimizers(self):
@@ -473,8 +411,15 @@ class ViTModule(pl.LightningModule):
         decay_start_epoch = int(EPOCHS * .2)
       
    
-        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=1e-3, eps=1e-7, 
-                                                    betas=(0.8, 0.99))
+        optimizer = torch.optim.AdamW( 
+            params=self.parameters(), 
+            lr=self.hparams.learning_rate, 
+            weight_decay=self.hparams.weight_decay,  
+            eps=1e-7, 
+            betas=(0.8, 0.99)
+        )
+
+
         scheduler_initial = LinearLR(
             optimizer, 
             start_factor=1.0, 
@@ -485,7 +430,7 @@ class ViTModule(pl.LightningModule):
         scheduler_decay = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.01,
+            end_factor=0.70,
             total_iters=(EPOCHS - decay_start_epoch)
         )
 
@@ -504,154 +449,220 @@ class ViTModule(pl.LightningModule):
             }
         }
 
+class ThresholdStopper(Callback):
+    def __init__(self, monitor: str, threshold: float, check_epoch: int):
+        super().__init__()
+        self.monitor = monitor     # e.g., 'val/loss'
+        self.threshold = threshold # e.g., 0.65
+        self.check_epoch = check_epoch   # The epoch to check (1-indexed, e.g., 3)
+
+    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        if trainer.sanity_checking:
+            return
+        current_epoch_num = trainer.current_epoch + 1
+        if current_epoch_num == self.check_epoch:
+            current_metric = trainer.callback_metrics.get(self.monitor)
+            
+            if current_metric is None:
+                return # Metric not available
+
+            if current_metric > self.threshold:
+                print(f"\nTriggering stop at Epoch {current_epoch_num}: "
+                      f"{self.monitor} ({current_metric:.4f}) > {self.threshold}. "
+                      f"Stopping training.")
+                trainer.should_stop = True
+
 
 def main():
     pl.seed_everything(42)
+    TASK = 0
+
     optimal_config_values = {
-        'TASK': 1,
-        'augment': False,
+        'augment': True,
         'batch_size': 512,
         'emb_dim': 384 ,
-        'emb_dropout': 0.2, 
-        'epochs': 3,
-        'lr': 0.0002,
-        'mlp_dropout': 0.2,
+        'emb_dropout': 0.23101135339596263 , 
+        'epochs': 10,
+        'lr': 0.00029,
+        'mlp_dropout': 0.28261284,
         'mlp_size': 512 ,
-        'num_heads': 2,
-        'num_transformer_layers': 4,
+        'num_heads': 4,
+        'num_transformer_layers': 8,
         'scheduler': True,
         'weight_decay':2.751984133978333e-05, 
         'grad_clip': 0.4677, 
         'num_aug_samples': 200000, 
         'use_clamping': False,
-        'clamp_range':500.0, 
-        'clip_factor': 50.0
+        'clamp_range':20.0
     }
+    wandb.init(project=f"ViT-Replication-QM9-Task{TASK}", config=optimal_config_values)
+        
+    config = wandb.config
 
-    TASK =optimal_config_values['TASK']
-
-    wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values)
-    config = wandb.config 
     run_name = f"augment={config.augment}&epochs={config.epochs}&batch_size={config.batch_size}&lr={config.lr}&scheduler={config.scheduler}&num_transformer_layers={config.num_transformer_layers}&num_heads={config.num_heads}&emb_dim={config.emb_dim}&mlp_size={config.mlp_size}&emb_dropout={config.emb_dropout}&mlp_dropout={config.mlp_dropout}"
 
-    df = npy_preprocessor("qm9_filtered.npy")
+    df_full = npy_preprocessor("qm9_filtered.npy")
+    X_all = df_full['xyz'].values 
+    y_all = (np.stack(df_full['rotation'].values)[:, 1] > 0).astype(int)
+
     if TASK == 1:
-        df = df[df['chiral_centers'].apply(len)==1]
 
-    X = df['xyz'].values 
-    y_original = ((np.stack(df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+        task_mask = df_full['chiral_centers'].apply(len) == 1
         
+        X_task = X_all[task_mask]
+        y_task = y_all[task_mask]
+    
+        # X_recycled = X_all[~task_mask]
+        # y_recycled = y_all[~task_mask]
+        X_recycled = np.array([]) 
+        y_recycled = np.array([])
+        print(f"Primary task samples: {len(X_task)}, Recycled samples: {len(X_recycled)}")
 
-    y_full = (y_original)
+    else:
+        X_task = X_all
+        y_task = y_all
+        X_recycled = np.array([]) 
+        y_recycled = np.array([])
+
     X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y_full, test_size=0.2, random_state=43 
+        X_task, y_task, test_size=0.2, random_state=43
     )
     
+
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_val, y_train_val, test_size=0.1, random_state=43
     )
 
     X_train_coords_flat = np.concatenate(X_train)[:, :3]
-    
     x_coord_scaler = StandardScaler()
     x_coord_scaler.fit(X_train_coords_flat) 
     
     def scale_x_coordinates(X_split, scaler):
+        if len(X_split) == 0:
+            return []
+            
         X_stacked = np.stack(X_split) 
+        
         coords = X_stacked[:, :, :3]
         features = X_stacked[:, :, 3:]
+        
         coords_scaled_flat = scaler.transform(coords.reshape(-1, 3))
         coords_scaled = coords_scaled_flat.reshape(X_stacked.shape[0], X_stacked.shape[1], 3)
+        
         X_scaled_stacked = np.concatenate((coords_scaled, features), axis=2)
+        
         return [X_scaled_stacked[i, ...] for i in range(X_scaled_stacked.shape[0])]
-
+    
     X_train_scaled = scale_x_coordinates(X_train, x_coord_scaler)
     X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
     X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
-    y_stats = y_full.flatten()
-    q1 = np.percentile(y_stats, 25)
-    q3 = np.percentile(y_stats, 75)
-    print("\n--- STATS FOR y_full (BEFORE StandardScaler) ---")
-    print(f"Min:    {np.min(y_stats):.4f}")
-    print(f"Max:    {np.max(y_stats):.4f}")
-    print(f"Mean:   {np.mean(y_stats):.4f}")
-    print(f"Std Dev:{np.std(y_stats):.4f}")
-    print(f"Median: {np.median(y_stats):.4f}")
-    print(f"Q1 (25%): {q1:.4f}")
-    print(f"Q3 (75%): {q3:.4f}")
+    X_recycled_scaled = scale_x_coordinates(X_recycled, x_coord_scaler) # Scale recycled data
 
+    # 1. Combine chiral train data with recycled data (already scaled)
+    X_train_base = X_train_scaled + X_recycled_scaled
+    y_train_base = np.concatenate((y_train, y_recycled))
 
-
-    q1 = np.percentile(y_stats, 25)
-    q3 = np.percentile(y_stats, 75)
-    iqr = q3 - q1
+    # --- START CHIRAL REFLECTION AUGMENTATION ---
+    X_reflected, y_reflected = [], []
+    print("Starting Chiral Reflection Augmentation...")
     
-    print("\n--- STATS FOR y_train (BEFORE CLIPPING) ---")
-    print(f"Q1: {q1:.4f}")
-    print(f"Q3: {q3:.4f}")
-    print(f"IQR: {iqr:.4f}")
+    # for i in tqdm(range(len(X_train_scaled)), desc="Applying Chiral Reflection"):
+    #     original_molecule = X_train_scaled[i]
+    #     original_label = y_train[i]
+        
+    #     # 1. Apply reflection transformation
+    #     # reflected_molecule = r nm  eflect_molecule(original_molecule)
+        
+    #     # # 2. Flip the binary label (0 -> 1, 1 -> 0)
+    #     # reflected_label = 1 - original_label 
+        
+    #     # X_reflected.append(reflected_molecule)
+    #     # y_reflected.append(reflected_label)
 
-    clip_factor = config.clip_factor
+    #     # oversampling 
+    #     X_reflected.append(original_molecule)
+    #     y_reflected.append(original_label)
 
-    clip_min = q1 - (clip_factor * iqr)
-    clip_max = q3 + (clip_factor * iqr)
+        
+    X_reflected_stacked = np.array(X_reflected)
+    y_reflected_stacked = np.array(y_reflected)
     
-    # This print statement is now accurate
-
-    print(f"Clipping range (Q1/Q3 +/- {clip_factor}*IQR): [{clip_min:.4f}, {clip_max:.4f}]")
-
-    # 3. Clip ALL your datasets using these bounds
-    y_train_clipped = np.clip(y_train, clip_min, clip_max)
-    y_val_clipped = np.clip(y_val, clip_min, clip_max)
-    y_test_clipped = np.clip(y_test, clip_min, clip_max)
-
-    # 4. NOW, fit the RobustScaler on the *clipped* training data
-    y_scaler = RobustScaler()
-    y_scaler.fit(y_train_clipped)
+    X_train_combined = X_train_base + [X_reflected_stacked[i, ...] for i in range(X_reflected_stacked.shape[0])]
+    y_train_combined = np.concatenate((y_train_base, y_reflected_stacked))
     
-    # 5. Transform all your clipped datasets
-    y_train_scaled = y_scaler.transform(y_train_clipped).flatten()
-    y_val_scaled = y_scaler.transform(y_val_clipped).flatten()
-    y_test_scaled = y_scaler.transform(y_test_clipped).flatten()
-    
+    print(f"Added {len(X_reflected)} reflected samples. Total training size before rotation: {len(X_train_combined)}")
+
+
+    print(f"Final training set size: {len(X_train_combined)}")
+    print(f"Final validation set size: {len(X_val_scaled)}")
+    print(f"Final test set size: {len(X_test_scaled)}")
 
     if config.augment:
-        X_train_aug, y_train_scaled_aug = augment_data(X_train_scaled, y_train_scaled, config.num_aug_samples)
+
+        print(f"Starting augmentation of {len(X_train_combined)} samples to add {config.num_aug_samples} new ones.")
+        X_train_aug, y_train_aug = augment_data(
+            X_train_combined, 
+            y_train_combined,
+            config.num_aug_samples
+        )
     else:
-        X_train_aug = X_train_scaled
-        y_train_scaled_aug = y_train_scaled
+        X_train_aug = X_train_combined
+        y_train_aug = y_train_combined
+        
+
+    train_dataset = MoleculeSequenceDataset(X_train_aug, y_train_aug)
+    val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val) 
+    test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test)
+
+    
+    
+    data_module = QMDataModule(batch_size=config.batch_size) 
+
+    data_module.set_datasets(train_dataset, val_dataset, test_dataset)
 
 
-    data_module = QMDataModule(X, y_full, 
-                               batch_size=config.batch_size, 
-                               augment=config.augment,
-                               scaler=y_scaler) # Pass Y scaler only
-
-    data_module.train_dataset = MoleculeSequenceDataset(X_train_aug, y_train_scaled_aug)
-    data_module.val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val_scaled)
-    data_module.test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test_scaled)
     
     model = ViTModule(learning_rate=config.lr, 
-                      embedding_dim=config.emb_dim, 
-                      embedding_dropout_rate=config.emb_dropout, 
-                      mlp_dropout_rate=config.mlp_dropout,
-                      num_transformer_layers=config.num_transformer_layers,
-                      num_heads=config.num_heads,
-                      mlp_size=config.mlp_size,
-                      scaler=y_scaler, 
-                    use_clamping=config.use_clamping,
-                      clamp_range=config.clamp_range)
+                        embedding_dim=config.emb_dim, 
+                        embedding_dropout_rate=config.emb_dropout, 
+                        mlp_dropout_rate=config.mlp_dropout,
+                        num_transformer_layers=config.num_transformer_layers,
+                        num_heads=config.num_heads,
+                        mlp_size=config.mlp_size,
+                        scaler=None, 
+                        use_clamping=config.use_clamping,
+                        clamp_range=config.clamp_range,
+                        weight_decay=config.weight_decay 
+                        )
 
+    early_stop_callback = EarlyStopping(
+        monitor='val/loss', 
+        min_delta=0.00, 
+        patience=2, 
+        verbose=False,
+        mode='min' 
+    )
 
-    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
+    epoch_3_stopper = ThresholdStopper(
+        monitor='val/loss_epoch',
+        threshold=0.68, 
+        check_epoch=9    
+    )
+    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
+        num_sanity_val_steps=0, 
         max_epochs=config.epochs, 
         accelerator='auto',
-        logger=wandb_logger,      
+        logger=wandb_logger, 
         gradient_clip_val=config.grad_clip, 
-        callbacks=[LearningRateMonitor(logging_interval='step')]
+        callbacks=[
+            LearningRateMonitor(logging_interval='step'),
+            # early_stop_callback, 
+            # epoch_3_stopper  # <-- Use the new callback
+        ]
     )
+    
     
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
@@ -659,4 +670,6 @@ def main():
 
     
 if __name__ == "__main__":
+
     main()
+
