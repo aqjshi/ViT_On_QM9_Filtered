@@ -315,7 +315,7 @@ class QMDataModule(pl.LightningDataModule):
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
-                 weight_decay=0.0): # <-- ADD IT HERE
+                 weight_decay=0.0, test_ids=None): # <-- 1. ADD test_ids HERE
         super().__init__()
         self.save_hyperparameters()
 
@@ -422,6 +422,17 @@ class ViTModule(pl.LightningModule):
         print(df_sample.to_string(float_format="{:.4f}".format))
         print("="*80 + "\n")
 
+        print("\nSaving test predictions to CSV...")
+        results_df = pd.DataFrame({
+            'item_id': self.test_ids,
+            'true_value_unscaled': unscaled_labels,
+            'prediction_unscaled': unscaled_preds
+        })
+        # Use the wandb run name to make the file unique
+        csv_filename = f"REGRESSION_TASK1_test_predictions.csv"
+        results_df.to_csv(csv_filename, index=False)
+        print(f"Saved predictions to {csv_filename}")
+
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
@@ -494,7 +505,7 @@ def main():
         'num_heads': 8,
         'num_transformer_layers': 6,
         'scheduler': True,
-        'weight_decay':1e-4, 
+        'weight_decay':1e-2, 
         'grad_clip': 1.1, 
         'num_aug_samples': 1000000,
     }   
@@ -619,7 +630,7 @@ def main():
     else:
         final_val_df = val_df
         final_test_df = test_df
-
+    test_ids_to_pass = final_test_df.index.values
     print(f"Final Train set size: {len(final_train_df)}")
     print(f"Final Val set size: {len(final_val_df)}")
     print(f"Final Test set size: {len(final_test_df)}")
@@ -676,7 +687,8 @@ def main():
                         num_heads=config.num_heads,
                         mlp_size=config.mlp_size,
                         scaler=y_scaler,
-                        weight_decay=config.weight_decay
+                        weight_decay=config.weight_decay, 
+                        test_ids=test_ids_to_pass
                         )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
