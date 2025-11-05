@@ -249,6 +249,7 @@ def translate_molecule(xyz_data, magnitude=0.02):
     return translated_xyz_data
 
 def reflect_molecule(xyz_data):
+    """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
     reflection_matrix = np.eye(3)
     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
     reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
@@ -313,9 +314,11 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, weight_decay=0):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+                 weight_decay=0.0, test_ids=None): # <-- 1. ADD test_ids HERE
         super().__init__()
         self.save_hyperparameters()
+
 
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
@@ -371,7 +374,6 @@ class ViTModule(pl.LightningModule):
         self.validation_step_outputs.clear() 
 
 
-
         scaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
         self.log('val/scaled_mae', scaled_mae, on_epoch=True, prog_bar=True)
         unscaled_preds = self.scaler.inverse_transform(all_scaled_preds.reshape(-1, 1)).flatten()
@@ -383,6 +385,7 @@ class ViTModule(pl.LightningModule):
 
 
     def on_test_epoch_end(self):
+        # 1. Gather 1D scaled arrays
         all_scaled_preds_flat = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
         all_scaled_labels_flat = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
         self.test_step_outputs.clear() 
@@ -392,7 +395,7 @@ class ViTModule(pl.LightningModule):
         
         self.log('test/scaled_mae', scaled_mae, on_epoch=True, prog_bar=True)
         
-
+        # 3. FIX: Reshape the 1D arrays to 2D (n_samples, 1) for inverse_transform
         scaled_preds_2d = all_scaled_preds_flat.reshape(-1, 1)
         scaled_labels_2d = all_scaled_labels_flat.reshape(-1, 1)
 
@@ -404,7 +407,9 @@ class ViTModule(pl.LightningModule):
         
         self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
 
-
+        # 5. PRINTING (still has one small issue)
+        print("\nTEST SET SAMPLE PREDICTIONS vs. TRUE VALUES (Unscaled)")
+        
         sample_data = {
             'True Value (y)': unscaled_labels[:20], 
             'Prediction (y_hat)': unscaled_preds[:20], 
@@ -416,6 +421,17 @@ class ViTModule(pl.LightningModule):
         
         print(df_sample.to_string(float_format="{:.4f}".format))
         print("="*80 + "\n")
+
+        print("\nSaving test predictions to CSV...")
+        results_df = pd.DataFrame({
+            'item_id': self.test_ids,
+            'true_value_unscaled': unscaled_labels,
+            'prediction_unscaled': unscaled_preds
+        })
+        # Use the wandb run name to make the file unique
+        csv_filename = f"REGRESSION_TASK0_test_predictions.csv"
+        results_df.to_csv(csv_filename, index=False)
+        print(f"Saved predictions to {csv_filename}")
 
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -477,25 +493,25 @@ def main():
     optimal_config_values = {
         'TASK': 0,
         'augment': True,
-        'only_mask': False,
+        'only_mask': True,
         'use_reflection': False, 
         'batch_size': 512,
-        'emb_dim': 768,
+        'emb_dim': 512,
         'emb_dropout': 0.0, 
         'epochs': 10,
         'lr': 0.00015,
-        'mlp_dropout': 0.2,
-        'mlp_size': 128,
-        'num_heads': 64,
-        'num_transformer_layers': 4,
+        'mlp_dropout': 0.0,
+        'mlp_size': 256,
+        'num_heads': 8,
+        'num_transformer_layers': 6,
         'scheduler': True,
-        'weight_decay':1e-3, 
-        'grad_clip': 2, 
-        'num_aug_samples': 600000,
+        'weight_decay':1e-2, 
+        'grad_clip': 1.1, 
+        'num_aug_samples': 1000000,
     }   
     
     TASK = optimal_config_values['TASK']
-    run_name = f"mlp_dropout{optimal_config_values['mlp_dropout']}"
+    run_name = f"weight_decay{optimal_config_values['weight_decay']}"
     wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values, name=run_name)
     config = wandb.config 
 
@@ -503,7 +519,6 @@ def main():
     df_full = npy_preprocessor("qm9_filtered.npy")
     train_val_df, test_df = train_test_split(df_full, test_size=0.2, random_state=43)
     train_df, val_df = train_test_split(train_val_df, test_size=0.1, random_state=43)
-
     y_scale_df= ((np.stack(train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
     
     y_scaler = RobustScaler()
@@ -615,7 +630,7 @@ def main():
     else:
         final_val_df = val_df
         final_test_df = test_df
-
+    test_ids_to_pass = final_test_df.index.values
     print(f"Final Train set size: {len(final_train_df)}")
     print(f"Final Val set size: {len(final_val_df)}")
     print(f"Final Test set size: {len(final_test_df)}")
@@ -651,7 +666,7 @@ def main():
     X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
     X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
 
-
+  
     y_train_scaled = y_scaler.transform(y_train).flatten()
     y_val_scaled = y_scaler.transform(y_val).flatten()
     y_test_scaled = y_scaler.transform(y_test).flatten()
@@ -665,16 +680,16 @@ def main():
     data_module.set_datasets(train_dataset, val_dataset, test_dataset)
 
     model = ViTModule(learning_rate=config.lr, 
-                      embedding_dim=config.emb_dim, 
-                      embedding_dropout_rate=config.emb_dropout, 
-                      mlp_dropout_rate=config.mlp_dropout,
-                      num_transformer_layers=config.num_transformer_layers,
-                      num_heads=config.num_heads,
-                      mlp_size=config.mlp_size,
-                      scaler=y_scaler, 
-                      weight_decay=config.weight_decay
-                      )
-
+                        embedding_dim=config.emb_dim, 
+                        embedding_dropout_rate=config.emb_dropout, 
+                        mlp_dropout_rate=config.mlp_dropout,
+                        num_transformer_layers=config.num_transformer_layers,
+                        num_heads=config.num_heads,
+                        mlp_size=config.mlp_size,
+                        scaler=y_scaler,
+                        weight_decay=config.weight_decay, 
+                        test_ids=test_ids_to_pass
+                        )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
