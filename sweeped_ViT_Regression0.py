@@ -249,7 +249,6 @@ def translate_molecule(xyz_data, magnitude=0.02):
     return translated_xyz_data
 
 def reflect_molecule(xyz_data):
-    """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
     reflection_matrix = np.eye(3)
     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
     reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
@@ -314,12 +313,10 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
-                 weight_decay=0.0, test_ids=None): # <-- 1. ADD test_ids HERE
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, weight_decay=0, test_ids=None):
         super().__init__()
         self.save_hyperparameters()
-
-
+        self.test_ids = test_ids
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
                          embedding_dropout=embedding_dropout_rate, 
@@ -372,6 +369,7 @@ class ViTModule(pl.LightningModule):
         all_scaled_preds = torch.cat([x['preds'] for x in self.validation_step_outputs]).cpu().numpy()
         all_scaled_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
         self.validation_step_outputs.clear() 
+
 
 
         scaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
@@ -493,21 +491,21 @@ def main():
     optimal_config_values = {
         'TASK': 0,
         'augment': True,
-        'only_mask': True,
+        'only_mask': False,
         'use_reflection': False, 
         'batch_size': 512,
-        'emb_dim': 512,
-        'emb_dropout': 0.0, 
+        'emb_dim': 768,
+        'emb_dropout': 0.05, 
         'epochs': 10,
         'lr': 0.00015,
-        'mlp_dropout': 0.0,
-        'mlp_size': 256,
-        'num_heads': 8,
-        'num_transformer_layers': 6,
+        'mlp_dropout': 0.1,
+        'mlp_size': 128,
+        'num_heads': 64,
+        'num_transformer_layers': 4,
         'scheduler': True,
         'weight_decay':1e-2, 
-        'grad_clip': 1.1, 
-        'num_aug_samples': 1000000,
+        'grad_clip': 2, 
+        'num_aug_samples': 600000,
     }   
     
     TASK = optimal_config_values['TASK']
@@ -519,6 +517,7 @@ def main():
     df_full = npy_preprocessor("qm9_filtered.npy")
     train_val_df, test_df = train_test_split(df_full, test_size=0.2, random_state=43)
     train_df, val_df = train_test_split(train_val_df, test_size=0.1, random_state=43)
+
     y_scale_df= ((np.stack(train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
     
     y_scaler = RobustScaler()
@@ -666,7 +665,7 @@ def main():
     X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
     X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
 
-  
+
     y_train_scaled = y_scaler.transform(y_train).flatten()
     y_val_scaled = y_scaler.transform(y_val).flatten()
     y_test_scaled = y_scaler.transform(y_test).flatten()
@@ -690,6 +689,7 @@ def main():
                         weight_decay=config.weight_decay, 
                         test_ids=test_ids_to_pass
                         )
+
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
