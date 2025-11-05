@@ -314,9 +314,11 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+                 weight_decay=0.0): # <-- ADD IT HERE
         super().__init__()
         self.save_hyperparameters()
+
 
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
@@ -444,7 +446,7 @@ class ViTModule(pl.LightningModule):
         decay_start_epoch = int(EPOCHS * .2)
       
    
-        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=1e-3, eps=1e-7, 
+        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.hparams.weight_decay, eps=1e-7, 
                                                     betas=(0.8, 0.99))
         scheduler_initial = LinearLR(
             optimizer, 
@@ -492,13 +494,13 @@ def main():
         'num_heads': 8,
         'num_transformer_layers': 6,
         'scheduler': True,
-        'weight_decay':0, 
+        'weight_decay':1e-4, 
         'grad_clip': 1.1, 
-        'num_aug_samples': 50000,
+        'num_aug_samples': 1000000,
     }   
     
     TASK = optimal_config_values['TASK']
-    run_name = f"num_aug_samples{optimal_config_values['num_aug_samples']}"
+    run_name = f"weight_decay{optimal_config_values['weight_decay']}"
     wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values, name=run_name)
     config = wandb.config 
 
@@ -667,15 +669,15 @@ def main():
     data_module.set_datasets(train_dataset, val_dataset, test_dataset)
 
     model = ViTModule(learning_rate=config.lr, 
-                      embedding_dim=config.emb_dim, 
-                      embedding_dropout_rate=config.emb_dropout, 
-                      mlp_dropout_rate=config.mlp_dropout,
-                      num_transformer_layers=config.num_transformer_layers,
-                      num_heads=config.num_heads,
-                      mlp_size=config.mlp_size,
-                      scaler=y_scaler
-                      )
-
+                        embedding_dim=config.emb_dim, 
+                        embedding_dropout_rate=config.emb_dropout, 
+                        mlp_dropout_rate=config.mlp_dropout,
+                        num_transformer_layers=config.num_transformer_layers,
+                        num_heads=config.num_heads,
+                        mlp_size=config.mlp_size,
+                        scaler=y_scaler,
+                        weight_decay=config.weight_decay
+                        )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
