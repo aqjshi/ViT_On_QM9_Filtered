@@ -248,18 +248,17 @@ def translate_molecule(xyz_data, magnitude=0.02):
     translated_xyz_data = np.hstack((translated_coords, other_feats))  # Still (27,8)
     return translated_xyz_data
 
-# def reflect_molecule(xyz_data):
-#     """Reflect the first 3 columns (x, y, z) across a randomly chosen axis."""
-#     reflection_matrix = np.eye(3)
-#     random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
-#     reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
+def reflect_molecule(xyz_data):
+    reflection_matrix = np.eye(3)
+    random_axis = np.random.choice([0, 1, 2])  # Choose x (0), y (1), or z (2)
+    reflection_matrix[random_axis, random_axis] = -1  # Reflect across the chosen axis
 
-#     coords_3d = xyz_data[:, :3]    # (27,3)
-#     other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
-#     reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
+    coords_3d = xyz_data[:, :3]    # (27,3)
+    other_feats = xyz_data[:, 3:]  # (27,5) or however many remain
+    reflected_coords = np.dot(coords_3d, reflection_matrix.T)  # Apply reflection
 
-#     reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
-#     return reflected_xyz_data
+    reflected_xyz_data = np.hstack((reflected_coords, other_feats))  # Still (27,8)
+    return reflected_xyz_data
 
 def augment_data(X_train, y_train, num_samples):
     X_train_stacked = np.stack(X_train)
@@ -314,13 +313,9 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
-                 use_clamping: bool = False,
-                 clamp_range: float = 20.0):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None):
         super().__init__()
         self.save_hyperparameters()
-        self.use_clamping = use_clamping # Store the flag
-        self.clamp_range = clamp_range   # Store the range
 
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
@@ -375,10 +370,6 @@ class ViTModule(pl.LightningModule):
         all_scaled_labels = torch.cat([x['labels'] for x in self.validation_step_outputs]).cpu().numpy()
         self.validation_step_outputs.clear() 
 
-        if self.use_clamping:
-            all_scaled_preds = np.clip(all_scaled_preds, 
-                                       -self.clamp_range, 
-                                        self.clamp_range) 
 
 
         scaled_mae = np.abs(all_scaled_preds - all_scaled_labels).mean()
@@ -392,7 +383,6 @@ class ViTModule(pl.LightningModule):
 
 
     def on_test_epoch_end(self):
-        # 1. Gather 1D scaled arrays
         all_scaled_preds_flat = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
         all_scaled_labels_flat = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
         self.test_step_outputs.clear() 
@@ -402,7 +392,7 @@ class ViTModule(pl.LightningModule):
         
         self.log('test/scaled_mae', scaled_mae, on_epoch=True, prog_bar=True)
         
-        # 3. FIX: Reshape the 1D arrays to 2D (n_samples, 1) for inverse_transform
+
         scaled_preds_2d = all_scaled_preds_flat.reshape(-1, 1)
         scaled_labels_2d = all_scaled_labels_flat.reshape(-1, 1)
 
@@ -414,9 +404,7 @@ class ViTModule(pl.LightningModule):
         
         self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
 
-        # 5. PRINTING (still has one small issue)
-        print("\nTEST SET SAMPLE PREDICTIONS vs. TRUE VALUES (Unscaled)")
-        
+
         sample_data = {
             'True Value (y)': unscaled_labels[:20], 
             'Prediction (y_hat)': unscaled_preds[:20], 
@@ -484,59 +472,173 @@ class ViTModule(pl.LightningModule):
             }
         }
 
-
 def main():
     pl.seed_everything(42)
     optimal_config_values = {
         'TASK': 0,
-        'augment': False,
+        'augment': True,
+        'only_mask': False,
+        'use_reflection': False, 
         'batch_size': 512,
-        'emb_dim': 512 ,
+        'emb_dim': 256,
         'emb_dropout': 0.0, 
-        'epochs': 15,
+        'epochs': 10,
         'lr': 0.0001,
         'mlp_dropout': 0.0,
-        'mlp_size': 1024 ,
-        'num_heads': 32,
-        'num_transformer_layers': 8,
+        'mlp_size': 64 ,
+        'num_heads': 2,
+        'num_transformer_layers': 2,
         'scheduler': True,
         'weight_decay':0, 
         'grad_clip': 2, 
-        'num_aug_samples': 200000, 
-        'use_clamping': False,
-        'clamp_range':500.0, 
-        'clip_factor': 388.75
+        'num_aug_samples': 50000,
     }   
-    # clip_factor= 55431.65 / 142.59 ​≈388.75
-    TASK =optimal_config_values['TASK']
-
-    wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values)
+    
+    TASK = optimal_config_values['TASK']
+    run_name = f"aug{optimal_config_values['augment']}_mask{optimal_config_values['only_mask']}_reflect{optimal_config_values['use_reflection']}"
+    wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values, name=run_name)
     config = wandb.config 
-    run_name = f"augment={config.augment}&epochs={config.epochs}&batch_size={config.batch_size}&lr={config.lr}&scheduler={config.scheduler}&num_transformer_layers={config.num_transformer_layers}&num_heads={config.num_heads}&emb_dim={config.emb_dim}&mlp_size={config.mlp_size}&emb_dropout={config.emb_dropout}&mlp_dropout={config.mlp_dropout}"
 
-    df = npy_preprocessor("qm9_filtered.npy")
-    if TASK == 1:
-        df = df[df['chiral_centers'].apply(len)==1]
+    # 1. Split your dataframes
+    df_full = npy_preprocessor("qm9_filtered.npy")
+    train_val_df, test_df = train_test_split(df_full, test_size=0.2, random_state=43)
+    train_df, val_df = train_test_split(train_val_df, test_size=0.1, random_state=43)
 
-    X = df['xyz'].values 
-    y_original = ((np.stack(df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+    y_scale_df= ((np.stack(train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+    
+    y_scaler = RobustScaler()
+    y_scaler.fit(y_scale_df) 
+
+    train_mask = train_df['chiral_centers'].apply(len) == 1
+    val_mask = val_df['chiral_centers'].apply(len) == 1
+    test_mask = test_df['chiral_centers'].apply(len) == 1
+
+    if config.only_mask:
+        train_df = train_df[train_mask]
+        val_df = val_df[val_mask]
+        test_df = test_df[test_mask]
+        train_mask = train_df['chiral_centers'].apply(len) == 1 
+
+    if config.augment:
+        if config.use_reflection:
+            print("Applying chiral reflection augmentation...")
+            train_chiral_df = train_df[train_mask].copy() 
+            X_chiral = np.stack(train_chiral_df['xyz'].values)
+            y_chiral = ((np.stack(train_chiral_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+            
+            X_reflected = []
+            for i in tqdm(range(len(X_chiral)), desc="Applying Chiral Reflection"):
+                X_reflected.append(reflect_molecule(X_chiral[i]))
+            
+            train_aug1 = pd.DataFrame({
+                'xyz': X_reflected,
+                'rotation': [np.array([0, val[0] * -1, 0]) for val in y_chiral] # Store 'y' back in 'rotation' col
+            })
+        else:
+            train_aug1 = pd.DataFrame(columns=['xyz', 'rotation']) 
         
 
-    y_full = (y_original)
-    X_train_val, X_test, y_train_val, y_test = train_test_split(
-        X, y_full, test_size=0.2, random_state=43 
-    )
-    
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_val, y_train_val, test_size=0.1, random_state=43
-    )
+        train_combined = pd.concat([train_df, train_aug1], ignore_index=True)
 
-    X_train_coords_flat = np.concatenate(X_train)[:, :3]
+        print("Applying general (rot/trans) augmentation...")
+        X_combined = np.stack(train_combined['xyz'].values)
+        y_combined = ((np.stack(train_combined['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+        
+        X_aug2_list, y_aug2_list = augment_data(
+            X_combined, 
+            y_combined.flatten(), 
+            config.num_aug_samples
+        )
+        
+        train_aug2 = pd.DataFrame({
+            'xyz': [X_aug2_list[i] for i in range(len(X_aug2_list))],
+            'rotation': [np.array([0, val, 0]) for val in y_aug2_list]
+        })
+        # Final DF = original + reflection (if any) + general aug
+        final_train_df = pd.concat([train_combined, train_aug2], ignore_index=True)
+    else:
+        if config.use_reflection:
+            print("Applying chiral reflection augmentation...")
+            train_chiral_df = train_df[train_mask].copy() 
+            X_chiral = np.stack(train_chiral_df['xyz'].values)
+            y_chiral = ((np.stack(train_chiral_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+            
+            X_reflected = []
+            for i in tqdm(range(len(X_chiral)), desc="Applying Chiral Reflection"):
+                X_reflected.append(reflect_molecule(X_chiral[i]))
+            
+            train_aug1 = pd.DataFrame({
+                'xyz': X_reflected,
+                'rotation': [np.array([0, val[0] * -1, 0]) for val in y_chiral] 
+            })
+        else:
+            train_aug1 = pd.DataFrame(columns=['xyz', 'rotation']) 
+        
+        train_combined = pd.concat([train_df, train_aug1], ignore_index=True)
+
+        final_train_df = train_combined
+
+    # --- "starving kid" logic ---
+    if TASK == 1:
+        print("TASK 1 active: Filtering Val/Test and recycling scraps...")
+        final_val_df = val_df[val_mask]
+        final_test_df = test_df[test_mask]
+        
+        val_scraps_df = val_df[~val_mask]
+        test_scraps_df = test_df[~test_mask]
+        
+        all_scraps_df = pd.concat([val_scraps_df, test_scraps_df], ignore_index=True)
+        
+        if not all_scraps_df.empty: # Only augment if there are scraps
+            X_scraps = np.stack(all_scraps_df['xyz'].values)
+            y_scraps = ((np.stack(all_scraps_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+            
+            print(f"Augmenting {len(all_scraps_df)} recycled scraps...")
+            X_scraps_aug_list, y_scraps_aug_list = augment_data(
+                X_scraps,
+                y_scraps.flatten(),
+                config.num_aug_samples // 2 # Augment scraps at half-rate
+            )
+            
+            scraps_aug_df = pd.DataFrame({
+                'xyz': [X_scraps_aug_list[i] for i in range(len(X_scraps_aug_list))],
+                'rotation': [np.array([0, val, 0]) for val in y_scraps_aug_list]
+            })
+
+            final_train_df = pd.concat([
+                final_train_df, 
+                all_scraps_df, 
+                scraps_aug_df
+            ], ignore_index=True)
+        else:
+            print("No scraps to recycle.")
+    else:
+        final_val_df = val_df
+        final_test_df = test_df
+
+    print(f"Final Train set size: {len(final_train_df)}")
+    print(f"Final Val set size: {len(final_val_df)}")
+    print(f"Final Test set size: {len(final_test_df)}")
+
+    # --- Extract X, y arrays from the FINAL dataframes ---
+    X_train = list(final_train_df['xyz'].values)
+    y_train = ((np.stack(final_train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
     
+    X_val = list(final_val_df['xyz'].values)
+    y_val = ((np.stack(final_val_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+    
+    X_test = list(final_test_df['xyz'].values)
+    y_test = ((np.stack(final_test_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+
+    # --- X Scaling ---
+    # Fit scaler ONLY on the original, non-aug train data
+    X_train_coords_flat = np.concatenate(list(train_df['xyz'].values))[:, :3]
     x_coord_scaler = StandardScaler()
     x_coord_scaler.fit(X_train_coords_flat) 
     
     def scale_x_coordinates(X_split, scaler):
+        if len(X_split) == 0:
+            return []
         X_stacked = np.stack(X_split) 
         coords = X_stacked[:, :, :3]
         features = X_stacked[:, :, 3:]
@@ -544,70 +646,23 @@ def main():
         coords_scaled = coords_scaled_flat.reshape(X_stacked.shape[0], X_stacked.shape[1], 3)
         X_scaled_stacked = np.concatenate((coords_scaled, features), axis=2)
         return [X_scaled_stacked[i, ...] for i in range(X_scaled_stacked.shape[0])]
-
+    
     X_train_scaled = scale_x_coordinates(X_train, x_coord_scaler)
     X_val_scaled = scale_x_coordinates(X_val, x_coord_scaler)
     X_test_scaled = scale_x_coordinates(X_test, x_coord_scaler)
-    y_stats = y_full.flatten()
-    q1 = np.percentile(y_stats, 25)
-    q3 = np.percentile(y_stats, 75)
-    print("\n--- STATS FOR y_full (BEFORE StandardScaler) ---")
-    print(f"Min:    {np.min(y_stats):.4f}")
-    print(f"Max:    {np.max(y_stats):.4f}")
-    print(f"Mean:   {np.mean(y_stats):.4f}")
-    print(f"Std Dev:{np.std(y_stats):.4f}")
-    print(f"Median: {np.median(y_stats):.4f}")
-    print(f"Q1 (25%): {q1:.4f}")
-    print(f"Q3 (75%): {q3:.4f}")
 
 
+    y_train_scaled = y_scaler.transform(y_train).flatten()
+    y_val_scaled = y_scaler.transform(y_val).flatten()
+    y_test_scaled = y_scaler.transform(y_test).flatten()
 
-    q1 = np.percentile(y_stats, 25)
-    q3 = np.percentile(y_stats, 75)
-    iqr = q3 - q1
-    
-    print("\n--- STATS FOR y_train (BEFORE CLIPPING) ---")
-    print(f"Q1: {q1:.4f}")
-    print(f"Q3: {q3:.4f}")
-    print(f"IQR: {iqr:.4f}")
-
-    clip_factor = config.clip_factor
-
-    clip_min = q1 - (clip_factor * iqr)
-    clip_max = q3 + (clip_factor * iqr)
-    
-    # This print statement is now accurate
-
-    print(f"Clipping range (Q1/Q3 +/- {clip_factor}*IQR): [{clip_min:.4f}, {clip_max:.4f}]")
-
-    y_train_clipped = np.clip(y_train, clip_min, clip_max)
-    y_val_clipped = np.clip(y_val, clip_min, clip_max)
-    y_test_clipped = np.clip(y_test, clip_min, clip_max)
-
-    y_scaler = RobustScaler()
-    y_scaler.fit(y_train_clipped)
-    
-    # 5. Transform all your clipped datasets
-    y_train_scaled = y_scaler.transform(y_train_clipped).flatten()
-    y_val_scaled = y_scaler.transform(y_val_clipped).flatten()
-    y_test_scaled = y_scaler.transform(y_test_clipped).flatten()
-    
-    if config.augment:
-        X_train_aug, y_train_scaled_aug = augment_data(X_train_scaled, y_train_scaled, config.num_aug_samples)
-    else:
-        X_train_aug = X_train_scaled
-        y_train_scaled_aug = y_train_scaled
-
-    train_dataset = MoleculeSequenceDataset(X_train_aug, y_train_scaled_aug)
+    # --- Create Datasets ---
+    train_dataset = MoleculeSequenceDataset(X_train_scaled, y_train_scaled)
     val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val_scaled)
     test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test_scaled)
 
-
-
     data_module = QMDataModule(batch_size=config.batch_size) 
-
     data_module.set_datasets(train_dataset, val_dataset, test_dataset)
-
 
     model = ViTModule(learning_rate=config.lr, 
                       embedding_dim=config.emb_dim, 
@@ -616,10 +671,8 @@ def main():
                       num_transformer_layers=config.num_transformer_layers,
                       num_heads=config.num_heads,
                       mlp_size=config.mlp_size,
-                      scaler=y_scaler, 
-                    use_clamping=config.use_clamping,
-                      clamp_range=config.clamp_range)
-
+                      scaler=y_scaler
+                      )
 
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
@@ -631,12 +684,70 @@ def main():
         callbacks=[LearningRateMonitor(logging_interval='step')]
     )
     
-    
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
     wandb.finish()
 
     
 if __name__ == "__main__":
-
     main()
+
+
+# '''
+# Starving Kid Data Max Algorithm
+# 1. Load and Split
+# df_full = load_data("qm9_filtered.npy")
+# train_df, val_df, test_df = split_data(df_full)
+
+# # 2. Build Base Training Set
+# if config.augment:
+#     # Create reflected chiral data
+#     train_chiral = train_df[train_df.chiral_len == 1]
+#     train_aug_reflect = reflect_data(train_chiral)
+    
+#     # Create general rot/trans augmentations
+#     train_combined = concat(train_df, train_aug_reflect)
+#     train_aug_general = augment_data(train_combined, num_samples)
+    
+#     # Combine all training data
+#     final_train_df = concat(train_df, train_aug_reflect, train_aug_general)
+# else:
+#     final_train_df = train_df
+
+# # 3. Handle Task (Filter Val/Test and Recycle Scraps)
+# if config.TASK == 1:
+#     # Set Val/Test to be chiral-only
+#     final_val_df = val_df[val_df.chiral_len == 1]
+#     final_test_df = test_df[test_df.chiral_len == 1]
+
+#     # Get non-chiral scraps from Val/Test
+#     scraps = concat(val_df[val_df.chiral_len != 1], test_df[test_df.chiral_len != 1])
+    
+#     # Augment and add scraps to the training pile (the "Starving Kid" part)
+#     scraps_aug = augment_data(scraps, num_samples / 2)
+#     final_train_df = concat(final_train_df, scraps, scraps_aug)
+# else:
+#     final_val_df = val_df
+#     final_test_df = test_df
+
+# # 4. Scale Data
+# # Fit X scaler on *original* train coords
+# x_scaler = StandardScaler().fit(train_df.X_coords)
+# train_X = x_scaler.transform(final_train_df.X)
+# val_X   = x_scaler.transform(final_val_df.X)
+# test_X  = x_scaler.transform(final_test_df.X)
+
+# # Fit Y scaler on *final* augmented train labels
+# y_scaler = RobustScaler().fit(final_train_df.y)
+# train_y = y_scaler.transform(final_train_df.y)
+# val_y   = y_scaler.transform(final_val_df.y)
+# test_y  = y_scaler.transform(final_test_df.y)
+
+# # 5. Train
+# datamodule = create_datamodule(train_X, train_y, val_X, val_y, test_X, test_y)
+# model      = create_model(y_scaler=y_scaler)
+# trainer    = create_trainer()
+
+# trainer.fit(model, datamodule)
+# trainer.test(model, datamodule)
+# '''
