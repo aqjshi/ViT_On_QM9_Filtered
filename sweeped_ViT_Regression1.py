@@ -318,7 +318,7 @@ class ViTModule(pl.LightningModule):
                  weight_decay=0.0, test_ids=None): # <-- 1. ADD test_ids HERE
         super().__init__()
         self.save_hyperparameters()
-
+        self.test_ids =test_ids
 
         self.model = ViT(embedding_dim=embedding_dim, 
                          num_classes=1, 
@@ -505,7 +505,7 @@ def main():
         'num_heads': 8,
         'num_transformer_layers': 6,
         'scheduler': True,
-        'weight_decay':1e-2, 
+        'weight_decay':5e-2, 
         'grad_clip': 1.1, 
         'num_aug_samples': 1000000,
     }   
