@@ -503,7 +503,7 @@ def main():
         'num_heads': 64,
         'num_transformer_layers': 4,
         'scheduler': True,
-        'weight_decay':1e-2, 
+        'weight_decay':5e-2, 
         'grad_clip': 2, 
         'num_aug_samples': 600000,
     }   
