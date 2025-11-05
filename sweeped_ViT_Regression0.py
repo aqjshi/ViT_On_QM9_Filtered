@@ -441,7 +441,7 @@ class ViTModule(pl.LightningModule):
         decay_start_epoch = int(EPOCHS * .2)
       
    
-        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=1e-3, eps=1e-7, 
+        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.hparams.weight_decay, eps=1e-7, 
                                                     betas=(0.8, 0.99))
         scheduler_initial = LinearLR(
             optimizer, 
@@ -480,22 +480,22 @@ def main():
         'only_mask': False,
         'use_reflection': False, 
         'batch_size': 512,
-        'emb_dim': 256,
+        'emb_dim': 768,
         'emb_dropout': 0.0, 
         'epochs': 10,
-        'lr': 0.0001,
-        'mlp_dropout': 0.0,
-        'mlp_size': 64 ,
-        'num_heads': 2,
-        'num_transformer_layers': 2,
+        'lr': 0.00015,
+        'mlp_dropout': 0.2,
+        'mlp_size': 128,
+        'num_heads': 64,
+        'num_transformer_layers': 4,
         'scheduler': True,
         'weight_decay':0, 
         'grad_clip': 2, 
-        'num_aug_samples': 50000,
+        'num_aug_samples': 600000,
     }   
     
     TASK = optimal_config_values['TASK']
-    run_name = f"aug{optimal_config_values['augment']}_mask{optimal_config_values['only_mask']}_reflect{optimal_config_values['use_reflection']}"
+    run_name = f"mlp_dropout{optimal_config_values['mlp_dropout']}"
     wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values, name=run_name)
     config = wandb.config 
 
