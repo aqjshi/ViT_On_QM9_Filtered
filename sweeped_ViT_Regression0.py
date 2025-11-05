@@ -313,7 +313,7 @@ class QMDataModule(pl.LightningDataModule):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None):
+                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, weight_decay=0):
         super().__init__()
         self.save_hyperparameters()
 
@@ -489,7 +489,7 @@ def main():
         'num_heads': 64,
         'num_transformer_layers': 4,
         'scheduler': True,
-        'weight_decay':0, 
+        'weight_decay':1e-3, 
         'grad_clip': 2, 
         'num_aug_samples': 600000,
     }   
@@ -671,7 +671,8 @@ def main():
                       num_transformer_layers=config.num_transformer_layers,
                       num_heads=config.num_heads,
                       mlp_size=config.mlp_size,
-                      scaler=y_scaler
+                      scaler=y_scaler, 
+                      weight_decay=config.weight_decay
                       )
 
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
