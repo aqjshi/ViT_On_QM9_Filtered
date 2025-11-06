@@ -248,7 +248,7 @@ def main():
     plt.savefig(plot_filename)
     plt.clf()
     print(f"\nSaved stratified overlay plot to {plot_filename}")
-    threshold =67.94521
-    mae, rmse, sign_accuracy, sign_f1, tolerance_accuracy, cm, spearman_corr, bp_test = analyze_prediction("REGRESSION_TASK0_test_predictions.csv", threshold)
+    threshold =79.36
+    mae, rmse, sign_accuracy, sign_f1, tolerance_accuracy, cm, spearman_corr, bp_test = analyze_prediction("REGRESSION_TASK1_test_predictions.csv", threshold)
 if __name__ == '__main__':
     main()
