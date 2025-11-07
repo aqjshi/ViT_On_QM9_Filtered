@@ -17,14 +17,7 @@ def npy_preprocessor(filename):
     return df
 
 def print_stats(series, name):
-    """Helper function to print descriptive statistics."""
     print(f"\n--- Statistics for {name} ---")
-    
-    # Check if series is empty to avoid errors
-    if series.empty:
-        print("  No data in this stratum.")
-        return
-
     print(f"  Count:  {series.count()}")
     print(f"  Mean:   {series.mean():.2f}")
     print(f"  Std:    {series.std():.2f}")
@@ -249,6 +242,6 @@ def main():
     plt.clf()
     print(f"\nSaved stratified overlay plot to {plot_filename}")
     threshold =79.36
-    mae, rmse, sign_accuracy, sign_f1, tolerance_accuracy, cm, spearman_corr, bp_test = analyze_prediction("REGRESSION_TASK1_test_predictions.csv", threshold)
+    mae, rmse, sign_accuracy, sign_f1, tolerance_accuracy, cm, spearman_corr, bp_test = analyze_prediction("2523ec84.csv", threshold)
 if __name__ == '__main__':
     main()
