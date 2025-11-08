@@ -255,33 +255,69 @@ class ViTModule(pl.LightningModule):
         return loss
             
 
-
     def configure_optimizers(self):
+        LR_START = 0.00015       # The initial learning rate (self.hparams.learning_rate)
+        E_P1 = 70                # End of Phase 1 (Start of Aggressive Decay)
+        E_P2 = 200                # End of Phase 2 (Start of Fine-Tuning Decay)
+        LR_P2_END = 0.00006      # Target LR at Epoch 40
+        LR_END = 0.0000001        # Final target LR at the end of total epochs
         
-        EPOCHS = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 30 
-        decay_start_epoch = int(EPOCHS * .2)
-      
-   
-        optimizer = torch.optim.AdamW( params=self.parameters(), lr=self.hparams.learning_rate, weight_decay=self.hparams.weight_decay, eps=1e-7, 
-                                                    betas=(0.8, 0.99))
-        scheduler_initial = LinearLR(
+        # --- CALCULATIONS ---
+        EPOCHS_TOTAL = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 150
+
+        # The end factor for the final LR, relative to LR_START
+        FINAL_END_FACTOR = LR_END / LR_START 
+        
+        # The end factor for the Phase 2 LR, relative to LR_START
+        FACTOR_P2_END = LR_P2_END / LR_START
+        
+        # --- OPTIMIZER ---
+        optimizer = torch.optim.AdamW(params=self.parameters(), 
+                                    lr=LR_START, 
+                                    weight_decay=self.hparams.weight_decay, 
+                                    eps=1e-7, 
+                                    betas=(0.8, 0.99))
+
+        # ----------------------------------------------------
+        # Phase 1: Constant LR (Epoch 0 to E_P1=10)
+        # ----------------------------------------------------
+        # total_iters = 10
+        scheduler1 = LinearLR(
             optimizer, 
             start_factor=1.0, 
             end_factor=1.0, 
-            total_iters=decay_start_epoch
+            total_iters=E_P1 
         )
-    
-        scheduler_decay = LinearLR(
+        
+        # ----------------------------------------------------
+        # Phase 2: Aggressive Decay (Epoch 10 to E_P2=40)
+        # ----------------------------------------------------
+        # total_iters = 40 - 10 = 30
+        scheduler2 = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.01,
-            total_iters=(EPOCHS - decay_start_epoch)
+            end_factor=FACTOR_P2_END, # Decays from 1.0 down to LR_P2_END / LR_START
+            total_iters=(E_P2 - E_P1) 
         )
-
+        
+        # ----------------------------------------------------
+        # Phase 3: Long-term Fine-tuning Decay (Epoch 40 to End)
+        # ----------------------------------------------------
+        # total_iters = EPOCHS_TOTAL - 40 (e.g., 150 - 40 = 110)
+        scheduler3 = LinearLR(
+            optimizer, 
+            start_factor=FACTOR_P2_END, # Starts where Phase 2 ended (at 4.0e-5 / 1.5e-4)
+            end_factor=FINAL_END_FACTOR, # Ends at the overall target (1.0e-6 / 1.5e-4)
+            total_iters=(EPOCHS_TOTAL - E_P2) 
+        )
+        
+        # ----------------------------------------------------
+        # Sequential Implementation
+        # ----------------------------------------------------
         scheduler = SequentialLR(
             optimizer,
-            schedulers=[scheduler_initial, scheduler_decay],
-            milestones=[decay_start_epoch]
+            schedulers=[scheduler1, scheduler2, scheduler3],
+            milestones=[E_P1, E_P2] 
         )
         
         return {
@@ -301,11 +337,11 @@ def main():
         'TASK': 1,
         'augment': True,
         'only_mask': False,
-        'use_reflection': False, 
+        'use_reflection': True, 
         'batch_size': 512,
         'embedding_dim': 768,
         'embedding_dropout_rate': 0.04, 
-        'epochs': 50,
+        'epochs': 400,
         'lr': 0.00015,
         'mlp_dropout_rate': 0.1,
         'mlp_size': 128,
@@ -313,8 +349,7 @@ def main():
         'num_transformer_layers': 4,
         'scheduler': True,
         'weight_decay':5e-2, 
-        'grad_clip':2, 
-        'num_aug_samples': 50000,
+        'grad_clip':2
     }   
     
     TASK = optimal_config_values['TASK']
@@ -327,28 +362,78 @@ def main():
 
     start_time  = time.time()
     df_full = npy_preprocessor("qm9_filtered.npy")
-    train_val_df, test_df = train_test_split(df_full, test_size=0.2, random_state=43)
-    train_df, val_df = train_test_split(train_val_df, test_size=0.1, random_state=43)
-    y_scale_df= ((np.stack(train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+    df_full = df_full.drop_duplicates(subset=['inchi'], keep='first')
+    if TASK == 1:
+        print("TASK 1 active: Filtering population *before* splitting.")
+        chiral_mask = df_full['chiral_centers'].apply(len) == 1
+        
+        # This is the (e.g., 20k) data we will split for train/val/test
+        df_for_split = df_full[chiral_mask].copy()
+        
+        # This is the (e.g., 110k) data we will add to the training set
+        df_scraps = df_full[~chiral_mask].copy()
+        
+        print(f"Separated {len(df_for_split)} chiral samples for splitting.")
+        print(f"Separated {len(df_scraps)} achiral scraps for training.")
     
+    else:
+        # If not TASK 1, we split the whole dataset and there are no scraps
+        df_for_split = df_full
+        df_scraps = pd.DataFrame(columns=df_full.columns) # Empty placeholder
+
+    
+    train_val_df, test_df = train_test_split(df_for_split, test_size=0.2, random_state=43)
+    train_df, val_df = train_test_split(train_val_df, test_size=0.1, random_state=43)
+
+    # This is the (chiral-only) data we will augment
+    train_chiral_df_for_aug = train_df.copy()
+
+    print(f"Adding {len(df_scraps)} recycled scraps to training set...")
+    real_train_df = pd.concat([train_df, df_scraps], ignore_index=False)
+    print(f"Total non-augmented training set size: {len(real_train_df)}")
+
+
+    print("--- Running Data Leak Check ---")
+
+    train_ids = set(real_train_df.index) # Contains original train + scraps
+    val_ids = set(val_df.index)          # Contains original val
+    test_ids = set(test_df.index)        # Contains original test
+
+    if (leak_tv := len(train_ids & val_ids)) > 0:
+        raise SystemExit(f"INDEX LEAK: {leak_tv} samples overlap between Train and Val sets. Halting.")
+    if (leak_tt := len(train_ids & test_ids)) > 0:
+        raise SystemExit(f"INDEX LEAK: {leak_tt} samples overlap between Train and Test sets. Halting.")
+    if (leak_vt := len(val_ids & test_ids)) > 0:
+        raise SystemExit(f"INDEX LEAK: {leak_vt} samples overlap between Val and Test sets. Halting.")
+    print("--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---")
+
+    # --- 2. InChI Leak Check (Checks for identical molecules) ---
+    print("--- Running InChI Leak Check ---")
+    
+    # Get the InChI strings from the 'inchi' column of each dataframe
+    train_inchis = set(real_train_df['inchi'])
+    val_inchis = set(val_df['inchi'])
+    test_inchis = set(test_df['inchi'])
+
+    if (leak_tv_inchi := len(train_inchis & val_inchis)) > 0:
+        raise SystemExit(f"INCHI LEAK: {leak_tv_inchi} molecules overlap between Train and Val sets. Halting.")
+    if (leak_tt_inchi := len(train_inchis & test_inchis)) > 0:
+        raise SystemExit(f"INCHI LEAK: {leak_tt_inchi} molecules overlap between Train and Test sets. Halting.")
+    if (leak_vt_inchi := len(val_inchis & test_inchis)) > 0:
+        raise SystemExit(f"INCHI LEAK: {leak_vt_inchi} molecules overlap between Val and Test sets. Halting.")
+    
+    print("--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---")
+
+    y_scale_df = ((np.stack(real_train_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
     y_scaler = RobustScaler()
     y_scaler.fit(y_scale_df) 
 
-    train_mask = train_df['chiral_centers'].apply(len) == 1
-    val_mask = val_df['chiral_centers'].apply(len) == 1
-    test_mask = test_df['chiral_centers'].apply(len) == 1
-
-    if config.only_mask:
-        train_df = train_df[train_mask]
-        val_df = val_df[val_mask]
-        test_df = test_df[test_mask]
-        train_mask = train_df['chiral_centers'].apply(len) == 1 
 
     if config.use_reflection:
         print("Applying chiral reflection augmentation...")
-        train_chiral_df = train_df[train_mask].copy() 
-        X_chiral = np.stack(train_chiral_df['xyz'].values)
-        y_chiral = ((np.stack(train_chiral_df['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
+        # We use the *chiral-only* `train_chiral_df_for_aug` we saved earlier
+        X_chiral = np.stack(train_chiral_df_for_aug['xyz'].values)
+        y_chiral = ((np.stack(train_chiral_df_for_aug['rotation'].values)[:, 1]).astype(float).reshape(-1, 1))
         
         X_reflected = []
         for i in tqdm(range(len(X_chiral)), desc="Applying Chiral Reflection"):
@@ -362,30 +447,14 @@ def main():
         train_aug1 = pd.DataFrame(columns=['xyz', 'rotation'])
 
 
-    final_train_df = pd.concat([train_df, train_aug1], ignore_index=True)
-    if TASK == 1:
-        print("TASK 1 active: Filtering Val/Test and recycling scraps...")
-        final_val_df = val_df[val_mask]
-        final_test_df = test_df[test_mask]
-        
-        val_scraps_df = val_df[~val_mask]
-        test_scraps_df = test_df[~test_mask]
-        
-        all_scraps_df = pd.concat([val_scraps_df, test_scraps_df], ignore_index=True)
-    
-        if not all_scraps_df.empty:
-            print(f"Adding {len(all_scraps_df)} recycled scraps to training set...")
-            final_train_df = pd.concat([final_train_df, all_scraps_df], ignore_index=True)
-        else:
-            print("No scraps to recycle.")
-    else:
-        final_val_df = val_df
-        final_test_df = test_df
+    final_train_df = pd.concat([real_train_df, train_aug1], ignore_index=True)
 
-
+    # Our val and test sets remain the "clean" originals
+    final_val_df = val_df
+    final_test_df = test_df
 
     test_ids_to_pass = final_test_df.index.values
-    print(f"Final Train set size: {len(final_train_df)}")
+    print(f"Final Train set size (with aug): {len(final_train_df)}")
     print(f"Final Val set size: {len(final_val_df)}")
     print(f"Final Test set size: {len(final_test_df)}")
 
