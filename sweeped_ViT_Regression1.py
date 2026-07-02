@@ -341,7 +341,7 @@ def main():
         'batch_size': 512,
         'embedding_dim': 768,
         'embedding_dropout_rate': 0.04, 
-        'epochs': 1000,
+        'epochs': 400,
         'lr': 0.00015,
         'mlp_dropout_rate': 0.1,
         'mlp_size': 128,
