@@ -1,0 +1,17 @@
+{
+    "TASK": 1,
+    "augment": false,
+    "only_mask": false,
+    "use_reflection": true, 
+    "augment_size": 2,   
+    "seq_len": 27,          
+    "input_feature_len": 8,   
+    "eval_metric": "mae",
+    "eta":0.02,
+    "n_estimators": 6000,
+    "max_depth":16, 
+    "n_jobs": 6, 
+    "seed": 43,
+    "reg_lambda": 4
+
+} 

@@ -31,7 +31,7 @@ python vit_classification.py config/vit_classification_task_0.json
 python vit_classification.py config/vit_classification_task_1.json                                  
 
 XGBoost
-python xgboost_regression.py
+python xgboost_regression.py config/xgboost_regression_task_0.json                                  
 
 To change the hyperaparmeters, go inside the config set, ctrl optimal_config_values and update them in the config file. 
 
