@@ -32,5 +32,5 @@ C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightn
 0         Modules in eval mode
 C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
 C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py:310: The number of training batches (32) is smaller than the logging interval Trainer(log_every_n_steps=50). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
-Epoch 5:  72%|▋| 23/32 [01:23<00:32,  0.28it/s, v_num=muin, val/loss_step=0.689, val/loss_epoch
+Epoch 6:  28%|▎| 9/32 [00:33<01:25,  0.27it/s, v_num=muin, val/loss_step=0.693, val/loss_epoch=
                                                                                                
