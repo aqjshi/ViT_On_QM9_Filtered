@@ -33,5 +33,5 @@ python vit_classification.py config/vit_classification_task_1.json
 XGBoost
 python xgboost_regression.py
 
-To change the hyperaparmeters, go inside the file, ctrl optimal_config_values and update them in the code. 
+To change the hyperaparmeters, go inside the config set, ctrl optimal_config_values and update them in the config file. 
 
