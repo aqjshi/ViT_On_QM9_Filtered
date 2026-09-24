@@ -9,3 +9,14 @@
 2026-09-23 22:16:44,103 INFO    MainThread:7024 [wandb_init.py:init():837] wandb.init called with sweep_config: {}
 config: {'TASK': 0, 'augment': True, 'only_mask': True, 'use_reflection': False, 'batch_size': 64, 'emb_dim': 384, 'emb_dropout': 0.23101135339596263, 'epochs': 10, 'lr': 0.00029, 'mlp_dropout': 0.28261284, 'mlp_size': 512, 'num_heads': 4, 'num_transformer_layers': 8, 'scheduler': True, 'weight_decay': 2.751984133978333e-05, 'grad_clip': 0.4677, 'num_aug_samples': 200000, 'use_clamping': False, 'clamp_range': 20.0, '_wandb': {}}
 2026-09-23 22:16:44,103 INFO    MainThread:7024 [wandb_init.py:init():880] starting backend
+2026-09-23 22:16:46,356 INFO    MainThread:7024 [wandb_init.py:init():883] sending inform_init request
+2026-09-23 22:16:46,386 INFO    MainThread:7024 [wandb_init.py:init():891] backend started and connected
+2026-09-23 22:16:46,387 INFO    MainThread:7024 [wandb_init.py:init():961] updated telemetry
+2026-09-23 22:16:46,745 INFO    MainThread:7024 [wandb_init.py:init():985] communicating run to backend with 90.0 second timeout
+2026-09-23 22:16:47,453 INFO    MainThread:7024 [wandb_init.py:init():1036] starting run threads in backend
+2026-09-23 22:16:47,523 INFO    MainThread:7024 [wandb_run.py:_console_start():2506] atexit reg
+2026-09-23 22:16:47,524 INFO    MainThread:7024 [wandb_run.py:_redirect():2354] redirect: wrap_raw
+2026-09-23 22:16:47,524 INFO    MainThread:7024 [wandb_run.py:_redirect():2423] Wrapping output streams.
+2026-09-23 22:16:47,524 INFO    MainThread:7024 [wandb_run.py:_redirect():2446] Redirects installed.
+2026-09-23 22:16:47,526 INFO    MainThread:7024 [wandb_init.py:init():1076] run started, returning control to user process
+2026-09-23 22:16:48,891 INFO    MainThread:7024 [wandb_run.py:_config_callback():1392] config_cb None None {'learning_rate': 0.00029, 'embedding_dim': 384, 'num_transformer_layers': 8, 'num_heads': 4, 'mlp_size': 512, 'embedding_dropout_rate': 0.23101135339596263, 'mlp_dropout_rate': 0.28261284, 'scaler': None, 'use_clamping': False, 'clamp_range': 20, 'test_ids': '[101480  89049  54595 ...  89613  39951  79251]', 'weight_decay': 2.751984133978333e-05}

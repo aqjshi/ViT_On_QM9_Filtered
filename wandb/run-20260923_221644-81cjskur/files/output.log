@@ -28,4 +28,4 @@ C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightn
 124       Modules in train mode
 0         Modules in eval mode
 C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
-Epoch 0:  79%|██████████████████████████▏      | 1050/1325 [09:06<02:23,  1.92it/s, v_num=skur]
+Epoch 0:  89%|█████████████████████████████▎   | 1178/1325 [10:18<01:17,  1.90it/s, v_num=skur]
