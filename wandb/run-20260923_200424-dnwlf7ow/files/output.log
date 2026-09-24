@@ -1,0 +1,123 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 84747
+Final Val set size: 9417
+Final Test set size: 23542
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 8.1 M  | train
+1 | criterion | BCEWithLogitsLoss | 0      | train
+2 | train_acc | BinaryAccuracy    | 0      | train
+3 | val_acc   | BinaryAccuracy    | 0      | train
+4 | test_acc  | BinaryAccuracy    | 0      | train
+--------------------------------------------------------
+8.1 M     Trainable params
+0         Non-trainable params
+8.1 M     Total params
+32.245    Total estimated model params size (MB)
+121       Modules in train mode
+0         Modules in eval mode
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+Epoch 0:   0%|                                                                                                                                                                               | 0/166 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_classification.py", line 503, in <module>
+    main()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_classification.py", line 496, in main
+    trainer.fit(model, datamodule=data_module)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 560, in fit
+    call._call_and_handle_interrupt(
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 598, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 1011, in _run
+    results = self._run_stage()
+              ^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 1055, in _run_stage
+    self.fit_loop.run()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py", line 216, in run
+    self.advance()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py", line 458, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\training_epoch_loop.py", line 152, in run
+    self.advance(data_fetcher)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\training_epoch_loop.py", line 348, in advance
+    batch_output = self.automatic_optimization.run(trainer.optimizers[0], batch_idx, kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\optimization\automatic.py", line 192, in run
+    self._optimizer_step(batch_idx, closure)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\optimization\automatic.py", line 270, in _optimizer_step
+    call._call_lightning_module_hook(
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\call.py", line 177, in _call_lightning_module_hook
+    output = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\core\module.py", line 1366, in optimizer_step
+    optimizer.step(closure=optimizer_closure)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\core\optimizer.py", line 154, in step
+    step_output = self._strategy.optimizer_step(self._optimizer, closure, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\strategies\strategy.py", line 239, in optimizer_step
+    return self.precision_plugin.optimizer_step(optimizer, model=model, closure=closure, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\plugins\precision\precision.py", line 123, in optimizer_step
+    return optimizer.step(closure=closure, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\optim\lr_scheduler.py", line 166, in wrapper
+    return func.__get__(opt, opt.__class__)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\optim\optimizer.py", line 549, in wrapper
+    out = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\optim\optimizer.py", line 79, in _use_grad
+    ret = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\optim\adam.py", line 227, in step
+    loss = closure()
+           ^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\plugins\precision\precision.py", line 109, in _wrap_closure
+    closure_result = closure()
+                     ^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\optimization\automatic.py", line 146, in __call__
+    self._result = self.closure(*args, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\optimization\automatic.py", line 131, in closure
+    step_output = self._step_fn()
+                  ^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\optimization\automatic.py", line 319, in _training_step
+    training_step_output = call._call_strategy_hook(trainer, "training_step", *kwargs.values())
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\call.py", line 329, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\strategies\strategy.py", line 391, in training_step
+    return self.lightning_module.training_step(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_classification.py", line 171, in training_step
+    loss = self.criterion(logits.squeeze(1), y.float())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\nn\modules\module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\nn\modules\module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\nn\modules\loss.py", line 838, in forward
+    return F.binary_cross_entropy_with_logits(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\nn\functional.py", line 3695, in binary_cross_entropy_with_logits
+    raise ValueError(
+ValueError: Target size (torch.Size([512, 1])) must be the same as input size (torch.Size([512]))

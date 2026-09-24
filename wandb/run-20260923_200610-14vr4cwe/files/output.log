@@ -1,0 +1,34 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 84747
+Final Val set size: 9417
+Final Test set size: 23542
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 8.1 M  | train
+1 | criterion | BCEWithLogitsLoss | 0      | train
+2 | train_acc | BinaryAccuracy    | 0      | train
+3 | val_acc   | BinaryAccuracy    | 0      | train
+4 | test_acc  | BinaryAccuracy    | 0      | train
+--------------------------------------------------------
+8.1 M     Trainable params
+0         Non-trainable params
+8.1 M     Total params
+32.245    Total estimated model params size (MB)
+121       Modules in train mode
+0         Modules in eval mode
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+Epoch 6:  15%|███████                                        | 25/166 [01:11<06:46,  0.35it/s, v_num=4cwe, train/loss_step=0.688, val/loss_step=0.700, val/loss_epoch=0.689, train/loss_epoch=0.692, train/acc=0.523]
+                                                                                                                                                                                                                     
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

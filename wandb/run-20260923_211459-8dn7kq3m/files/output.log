@@ -1,0 +1,33 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 84747
+Final Val set size: 9417
+Final Test set size: 23542
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 3.2 M  | train
+1 | criterion | BCEWithLogitsLoss | 0      | train
+2 | train_acc | BinaryAccuracy    | 0      | train
+3 | val_acc   | BinaryAccuracy    | 0      | train
+4 | test_acc  | BinaryAccuracy    | 0      | train
+--------------------------------------------------------
+3.2 M     Trainable params
+0         Non-trainable params
+3.2 M     Total params
+12.960    Total estimated model params size (MB)
+95        Modules in train mode
+0         Modules in eval mode
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+Epoch 0:  86%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████▏                  | 284/332 [02:58<00:30,  1.59it/s, v_num=kq3m, train/loss_step=0.691]
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

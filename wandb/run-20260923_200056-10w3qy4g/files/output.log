@@ -1,0 +1,16 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 84747
+Final Val set size: 9417
+Final Test set size: 23542
+Traceback (most recent call last):
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_classification.py", line 503, in <module>
+    main()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_classification.py", line 429, in main
+    y_train = ((np.stack(final_train_df['binary_rotation'].values)[:, 0]).astype(float).reshape(-1, 1))
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+IndexError: too many indices for array: array is 1-dimensional, but 2 were indexed

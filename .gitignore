@@ -1,0 +1,8 @@
+venv/
+env/
+out/
+qm9_filtered.npy
+ViT-Replication-QM9-Regression-Task0/
+ViT-Replication-QM9-Regression-Task1/
+ViT-Replication-QM9-Task0/
+ViT-Replication-QM9-Task1/

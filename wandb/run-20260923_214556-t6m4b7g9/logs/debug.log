@@ -1,0 +1,29 @@
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_setup.py:_flush():81] Current SDK version is 0.22.1
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_setup.py:_flush():81] Configure stats pid to 44060
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_setup.py:_flush():81] Loading settings from C:\Users\aqjsh\.config\wandb\settings
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_setup.py:_flush():81] Loading settings from C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\wandb\settings
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_init.py:setup_run_log_directory():705] Logging user logs to C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\wandb\run-20260923_214556-t6m4b7g9\logs\debug.log
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_init.py:setup_run_log_directory():706] Logging internal logs to C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\wandb\run-20260923_214556-t6m4b7g9\logs\debug-internal.log
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_init.py:init():832] calling init triggers
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_init.py:init():837] wandb.init called with sweep_config: {}
+config: {'TASK': 0, 'augment': False, 'only_mask': True, 'use_reflection': False, 'batch_size': 256, 'emb_dim': 256, 'emb_dropout': 0.23, 'epochs': 10, 'lr': 0.00029, 'mlp_dropout': 0.28261284, 'mlp_size': 256, 'num_heads': 2, 'num_transformer_layers': 2, 'scheduler': True, 'weight_decay': 2.751984133978333e-05, 'grad_clip': 0.4677, 'num_aug_samples': 50000, 'use_clamping': False, 'clamp_range': 20.0, '_wandb': {}}
+2026-09-23 21:45:56,173 INFO    MainThread:44060 [wandb_init.py:init():880] starting backend
+2026-09-23 21:45:58,423 INFO    MainThread:44060 [wandb_init.py:init():883] sending inform_init request
+2026-09-23 21:45:58,448 INFO    MainThread:44060 [wandb_init.py:init():891] backend started and connected
+2026-09-23 21:45:58,449 INFO    MainThread:44060 [wandb_init.py:init():961] updated telemetry
+2026-09-23 21:45:58,761 INFO    MainThread:44060 [wandb_init.py:init():985] communicating run to backend with 90.0 second timeout
+2026-09-23 21:45:59,126 INFO    MainThread:44060 [wandb_init.py:init():1036] starting run threads in backend
+2026-09-23 21:45:59,195 INFO    MainThread:44060 [wandb_run.py:_console_start():2506] atexit reg
+2026-09-23 21:45:59,195 INFO    MainThread:44060 [wandb_run.py:_redirect():2354] redirect: wrap_raw
+2026-09-23 21:45:59,195 INFO    MainThread:44060 [wandb_run.py:_redirect():2423] Wrapping output streams.
+2026-09-23 21:45:59,195 INFO    MainThread:44060 [wandb_run.py:_redirect():2446] Redirects installed.
+2026-09-23 21:45:59,197 INFO    MainThread:44060 [wandb_init.py:init():1076] run started, returning control to user process
+2026-09-23 21:46:00,502 INFO    MainThread:44060 [wandb_run.py:_config_callback():1392] config_cb None None {'learning_rate': 0.00029, 'embedding_dim': 256, 'num_transformer_layers': 2, 'num_heads': 2, 'mlp_size': 256, 'embedding_dropout_rate': 0.23, 'mlp_dropout_rate': 0.28261284, 'scaler': None, 'use_clamping': False, 'clamp_range': 20, 'test_ids': '[101480  89049  54595 ...  89613  39951  79251]', 'weight_decay': 2.751984133978333e-05}
+2026-09-23 21:56:46,460 INFO    MainThread:44060 [wandb_run.py:_config_callback():1392] config_cb None None {'learning_rate': 0.00029, 'embedding_dim': 256, 'num_transformer_layers': 2, 'num_heads': 2, 'mlp_size': 256, 'embedding_dropout_rate': 0.23, 'mlp_dropout_rate': 0.28261284, 'scaler': None, 'use_clamping': False, 'clamp_range': 20, 'test_ids': '[101480  89049  54595 ...  89613  39951  79251]', 'weight_decay': 2.751984133978333e-05}
+2026-09-23 21:57:11,930 INFO    MainThread:44060 [wandb_run.py:_config_callback():1392] config_cb ('_wandb', 'visualize', 'test/confusion_matrix') {'panel_type': 'Vega2', 'panel_config': {'panelDefId': 'wandb/confusion_matrix/v1', 'fieldSettings': {'Actual': 'Actual', 'Predicted': 'Predicted', 'nPredictions': 'nPredictions'}, 'stringSettings': {'title': 'Confusion Matrix Curve'}, 'transform': {'name': 'tableWithLeafColNames'}, 'userQuery': {'queryFields': [{'name': 'runSets', 'args': [{'name': 'runSets', 'value': '${runSets}'}], 'fields': [{'name': 'id', 'fields': []}, {'name': 'name', 'fields': []}, {'name': '_defaultColorIndex', 'fields': []}, {'name': 'summaryTable', 'args': [{'name': 'tableKey', 'value': 'test/confusion_matrix_table'}], 'fields': []}]}]}}} None
+2026-09-23 21:57:13,742 INFO    MainThread:44060 [wandb_run.py:_finish():2272] finishing run aqj-shi-blendingwaves/ViT-Replication-QM9-Task0/t6m4b7g9
+2026-09-23 21:57:13,743 INFO    MainThread:44060 [wandb_run.py:_atexit_cleanup():2471] got exitcode: 0
+2026-09-23 21:57:13,743 INFO    MainThread:44060 [wandb_run.py:_restore():2453] restore
+2026-09-23 21:57:13,743 INFO    MainThread:44060 [wandb_run.py:_restore():2459] restore done
+2026-09-23 21:57:14,677 INFO    MainThread:44060 [wandb_run.py:_footer_sync_info():3869] logging synced files

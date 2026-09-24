@@ -1,0 +1,31 @@
+Starting Chiral Reflection Augmentation...
+Added 0 reflected samples. Total training size before rotation: 87418
+Final training set size: 87418
+Final validation set size: 9714
+Final test set size: 24284
+Starting augmentation of 87418 samples to add 200000 new ones.
+Augmenting data: 100%|██████████████████████████████| 200000/200000 [00:06<00:00, 31575.49it/s]
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 8.1 M  | train
+1 | criterion | BCEWithLogitsLoss | 0      | train
+2 | train_acc | BinaryAccuracy    | 0      | train
+3 | val_acc   | BinaryAccuracy    | 0      | train
+4 | test_acc  | BinaryAccuracy    | 0      | train
+--------------------------------------------------------
+8.1 M     Trainable params
+0         Non-trainable params
+8.1 M     Total params
+32.245    Total estimated model params size (MB)
+121       Modules in train mode
+0         Modules in eval mode
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+Epoch 0:   3%|▍            | 32/952 [02:03<59:00,  0.26it/s, v_num=a4cq, train/loss_step=0.711]
+
+Detected KeyboardInterrupt, attempting graceful shutdown ...

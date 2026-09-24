@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from augmentation import translate_molecule, rotate_molecule, reflect_molecule
+from core.augmentation import translate_molecule, rotate_molecule, reflect_molecule
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, f1_score
 import secrets

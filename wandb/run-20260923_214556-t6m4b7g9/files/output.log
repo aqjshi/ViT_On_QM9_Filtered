@@ -1,0 +1,41 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 84747
+Final Val set size: 9417
+Final Test set size: 23542
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 1.0 M  | train
+1 | criterion | BCEWithLogitsLoss | 0      | train
+2 | train_acc | BinaryAccuracy    | 0      | train
+3 | val_acc   | BinaryAccuracy    | 0      | train
+4 | test_acc  | BinaryAccuracy    | 0      | train
+--------------------------------------------------------
+1.0 M     Trainable params
+0         Non-trainable params
+1.0 M     Total params
+4.003     Total estimated model params size (MB)
+46        Modules in train mode
+0         Modules in eval mode
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+Epoch 9: 100%|██████████████████████████████████████████████| 332/332 [01:01<00:00,  5.44it/s, v_num=b7g9, train/loss_step=0.636, val/loss_step=0.670, val/loss_epoch=0.663, train/loss_epoch=0.670, train/acc=0.585]
+Testing DataLoader 0: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 46/46 [00:03<00:00, 11.83it/s]
+`Trainer.fit` stopped: `max_epochs=10` reached.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\connectors\data_connector.py:428: Consider setting `persistent_workers=True` in 'test_dataloader' to speed up the dataloader worker initialization.
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃[1m [0m[1m       Test metric       [0m[1m [0m┃[1m [0m[1m      DataLoader 0       [0m[1m [0m┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│[36m [0m[36m        test/acc         [0m[36m [0m│[35m [0m[35m   0.5901792645454407    [0m[35m [0m│
+│[36m [0m[36m        test/loss        [0m[36m [0m│[35m [0m[35m   0.6668170690536499    [0m[35m [0m│
+└───────────────────────────┴───────────────────────────┘

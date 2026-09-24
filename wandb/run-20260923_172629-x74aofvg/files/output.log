@@ -1,0 +1,99 @@
+Original file has 121416 total samples.
+Found and removed 3710 duplicate InChI molecules.
+There are now 117706 unique samples remaining.
+TASK 1 active: Filtering population *before* splitting.
+Separated 22580 chiral samples for splitting.
+Separated 95126 achiral scraps for training.
+--- Running Data Leak Check ---
+--- LEAK CHECK (INDEX) PASSED: No index overlap found. ---
+--- Running InChI Leak Check ---
+--- LEAK CHECK (INCHI) PASSED: No molecular identity overlap found. ---
+Final Train set size (with aug): 16257
+Final Val set size: 1807
+Final Test set size: 4516
+💡 Tip: For seamless cloud uploads and versioning, try installing [litmodels](https://pypi.org/project/litmodels/) to enable LitModelCheckpoint, which syncs automatically with the Lightning model registry.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loggers\wandb.py:397: There is a wandb run already in progress and newly created instances of `WandbLogger` will reuse this run. If this is not desired, call `wandb.finish()` before instantiating `WandbLogger`.
+
+  | Name      | Type              | Params | Mode
+--------------------------------------------------------
+0 | model     | ViT               | 10.9 M | train
+1 | criterion | HuberLoss         | 0      | train
+2 | train_mae | MeanAbsoluteError | 0      | train
+3 | val_mae   | MeanAbsoluteError | 0      | train
+4 | test_mae  | MeanAbsoluteError | 0      | train
+--------------------------------------------------------
+10.9 M    Trainable params
+0         Non-trainable params
+10.9 M    Total params
+43.508    Total estimated model params size (MB)
+69        Modules in train mode
+0         Modules in eval mode
+Epoch 0:   0%|                                                                                                                                                                                | 0/32 [00:00<?, ?it/s]
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\connectors\data_connector.py:433: The 'val_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=31` in the `DataLoader` to improve performance.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\connectors\data_connector.py:433: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=31` in the `DataLoader` to improve performance.
+C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py:310: The number of training batches (32) is smaller than the logging interval Trainer(log_every_n_steps=50). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+Traceback (most recent call last):
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_regression.py", line 465, in <module>
+    main()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\vit_regression.py", line 458, in main
+    trainer.fit(model, datamodule=data_module)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 560, in fit
+    call._call_and_handle_interrupt(
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 598, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 1011, in _run
+    results = self._run_stage()
+              ^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\trainer\trainer.py", line 1055, in _run_stage
+    self.fit_loop.run()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py", line 216, in run
+    self.advance()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fit_loop.py", line 458, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\training_epoch_loop.py", line 152, in run
+    self.advance(data_fetcher)
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\training_epoch_loop.py", line 310, in advance
+    batch, _, __ = next(data_fetcher)
+                   ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fetchers.py", line 134, in __next__
+    batch = super().__next__()
+            ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\loops\fetchers.py", line 61, in __next__
+    batch = next(self.iterator)
+            ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\combined_loader.py", line 341, in __next__
+    out = next(self._iterator)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\pytorch_lightning\utilities\combined_loader.py", line 78, in __next__
+    out[i] = next(self.iterators[i])
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\data\dataloader.py", line 725, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\data\dataloader.py", line 1531, in _next_data
+    return self._process_data(data, worker_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\data\dataloader.py", line 1569, in _process_data
+    data.reraise()
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\_utils.py", line 803, in reraise
+    raise exception
+NameError: Caught NameError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\data\_utils\worker.py", line 375, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\venv\Lib\site-packages\torch\utils\data\_utils\fetch.py", line 54, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "C:\Users\aqjsh\Desktop\ViT_On_QM9_Filtered\core\dataset.py", line 33, in __getitem__
+    aug_choice = np.random.choice(['rotate', 'translate'])
+                 ^^
+NameError: name 'np' is not defined
