@@ -54,9 +54,9 @@ class QMDataModule(pl.LightningDataModule):
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, persistent_workers=True) 
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, persistent_workers=True, drop_last=True) 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size * 2, num_workers=4, persistent_workers=True)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size * 2, num_workers=4, persistent_workers=True, drop_last=True)
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size * 2, num_workers=4) 
 

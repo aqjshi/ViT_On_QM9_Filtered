@@ -1,0 +1,23 @@
+{   
+    "TASK": 1,
+    "seed":42,
+    "augment": false,
+    "only_mask": true,
+    "use_reflection": false, 
+    "batch_size": 64,
+    "emb_dim": 384 ,
+    "emb_dropout": 0.05, 
+    "decay_start_epoch": 3,
+    "epochs": 50,
+    "lr": 0.0004,
+    "mlp_dropout": 0.05,
+    "mlp_size": 256 ,
+    "num_heads": 4,
+    "num_transformer_layers": 6,
+    "in_channels":8, 
+    "patch_size":27,
+    "scheduler": true,
+    "weight_decay":0.0002, 
+    "grad_clip": 0.46, 
+    "patience":8
+}

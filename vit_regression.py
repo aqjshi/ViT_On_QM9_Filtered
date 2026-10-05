@@ -2,19 +2,14 @@
 import torch
 from torch import nn
 import pandas as pd
-from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor
-from torchmetrics import Accuracy
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
 from tqdm import tqdm
 import numpy as np
 from pytorch_lightning.loggers import WandbLogger
 import wandb
-from sklearn.metrics import accuracy_score, f1_score
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
-from pytorch_lightning.tuner import Tuner
-import argparse 
 from torchmetrics import MeanAbsoluteError
 from sklearn.preprocessing import StandardScaler, RobustScaler
 import json
@@ -32,21 +27,21 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 from core.ViT import ViT
-from core.utils import read_data, npy_preprocessor, scale_x_coordinates
+from core.utils import npy_preprocessor, scale_x_coordinates
 from core.dataset import MoleculeSequenceDataset, QMDataModule
-from core.augmentation import rotate_molecule, translate_molecule, reflect_molecule
+from core.augmentation import reflect_molecule
 
 
 
 class ViTModule(pl.LightningModule):
-    def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
+    def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
                  weight_decay=0.0, test_ids=None, output_file_name= None): 
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
         self.output_file_name =output_file_name
-        self.model = ViT(embedding_dim=embedding_dim, 
+        self.model = ViT(in_channels=in_channels, patch_size=patch_size, embedding_dim=embedding_dim, 
                          num_classes=1, 
                          embedding_dropout=embedding_dropout_rate, 
                          mlp_dropout=mlp_dropout_rate,
@@ -63,7 +58,6 @@ class ViTModule(pl.LightningModule):
 
         self.validation_step_outputs = []
         self.test_step_outputs = []
-        self.OVERFLOW_CLIP_VAL = 5
     def forward(self, x):
         return self.model(x)
 
@@ -234,20 +228,15 @@ class ViTModule(pl.LightningModule):
         }
 
 def main():
-   
-    pl.seed_everything(42)
 
     policy_path = sys.argv[1] 
     optimal_config_values = json.load(open(policy_path))
-
-
-    
+    pl.seed_everything(optimal_config_values['seed'])
     TASK = optimal_config_values['TASK']
-
     run_name = f"{secrets.token_hex(4)}"
     torch.set_float32_matmul_precision('medium')
     wandb.finish()
-    wandb.init(project=f"ViT-Replication-QM9-Regression-Task{TASK}", config=optimal_config_values, name=run_name)
+    wandb.init(project=f"ViT-QM9-Regression-{TASK}", config=optimal_config_values, name=run_name)
     config = wandb.config 
 
     start_time  = time.time()
@@ -393,7 +382,8 @@ def main():
     data_module = QMDataModule(batch_size=config.batch_size) 
     data_module.set_datasets(train_dataset, val_dataset, test_dataset)
 
-    model = ViTModule(learning_rate=config.lr, 
+    model = ViTModule(in_channels= config.in_channels, patch_size=config.patch_size,
+                      learning_rate=config.lr, 
                         embedding_dim=config.embedding_dim, 
                         embedding_dropout_rate=config.embedding_dropout_rate, 
                         mlp_dropout_rate=config.mlp_dropout_rate,
@@ -406,6 +396,17 @@ def main():
                         output_file_name=run_name
 
                         )
+
+    
+    early_stop_callback = EarlyStopping(
+        monitor='val/loss', 
+        min_delta=0.00, 
+        patience=optimal_config_values["patience"], 
+        verbose=False,
+        mode='min' 
+    )
+
+
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
 
     trainer = pl.Trainer(
@@ -413,7 +414,10 @@ def main():
         accelerator='auto',
         logger=wandb_logger,      
         gradient_clip_val=config.grad_clip, 
-        callbacks=[LearningRateMonitor(logging_interval='step')]
+        callbacks=[
+            LearningRateMonitor(logging_interval='step'), 
+            early_stop_callback
+        ]
     )
     
     trainer.fit(model, datamodule=data_module)

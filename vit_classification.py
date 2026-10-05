@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 import pandas as pd
-from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
@@ -10,17 +9,14 @@ from tqdm import tqdm
 import numpy as np
 from pytorch_lightning.loggers import WandbLogger
 import wandb
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import f1_score
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
-from pytorch_lightning.tuner import Tuner
-import argparse 
-from torchmetrics import MeanAbsoluteError
 from sklearn.preprocessing import StandardScaler
 from pytorch_lightning.callbacks.callback import Callback
 import sys 
 import os 
 import secrets
-import time
+
 import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -29,30 +25,29 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 
-from core.ViT import ViT, PatchEmbedding, TransformerEncoderBlock
-from core.utils import read_data, npy_preprocessor, scale_x_coordinates
+from core.ViT import PatchEmbedding, TransformerEncoderBlock
+from core.utils import npy_preprocessor, scale_x_coordinates
 from core.dataset import MoleculeSequenceDataset, QMDataModule
-from core.augmentation import rotate_molecule, translate_molecule, reflect_molecule
+from core.augmentation import  reflect_molecule
 
 
 
 class ViT(nn.Module):
     def __init__(self,
-               in_channels: int = 8,
-               patch_size: int = 1,
-               num_transformer_layers: int = 8, #L
-               embedding_dim: int = 216,    # Hidden size D from Table1
-               num_heads: int = 8,     #table1
-               mlp_size: int = 1024,     #table 1
-               attn_dropout: int = 0,
-               mlp_dropout: float = 0.1,
-               embedding_dropout: float = 0.1,
-               num_classes: int = 2):
+               in_channels,
+               patch_size,
+               num_transformer_layers, #L
+               embedding_dim,    # Hidden size D from Table1
+               num_heads,     #table1
+               mlp_size,     #table 1
+               mlp_dropout,
+               embedding_dropout,
+               num_classes):
         super().__init__()
-        self.num_patches = 27
+    
         self.class_embeddings = nn.Parameter(torch.randn(1,1,embedding_dim), requires_grad=True)
 
-        self.position_embeddings = nn.Parameter(torch.randn(1,self.num_patches+1,embedding_dim), requires_grad=True)
+        self.position_embeddings = nn.Parameter(torch.randn(1,patch_size+1,embedding_dim), requires_grad=True)
 
         #Create the embedding dropout
         self.embedding_dropout = nn.Dropout(p=embedding_dropout)
@@ -97,29 +92,32 @@ class ViT(nn.Module):
 
 
 class ViTModule(pl.LightningModule):
-    def __init__(self, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
-                 use_clamping: bool = False,
-                 clamp_range: float = 20.0, 
+    def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
+                 num_heads, mlp_size, decay_start_epoch=None, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+         
                  test_ids=None,
                  weight_decay: float = 0.0):
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
         
-        self.use_clamping = use_clamping # Store the flag
-        self.clamp_range = clamp_range   # Store the range
+       
+   
         self.weight_decay = weight_decay   # Store the range
 
-        self.model = ViT(embedding_dim=embedding_dim, 
-                         num_classes=1, 
-                         embedding_dropout=embedding_dropout_rate, 
-                         mlp_dropout=mlp_dropout_rate, 
+        self.model = ViT(
+                        in_channels=in_channels,
+                        patch_size=patch_size, 
+                        embedding_dim=embedding_dim, 
 
-                         num_transformer_layers = num_transformer_layers, 
-                         num_heads = num_heads,
-                         mlp_size = mlp_size
-                         )
+                        num_classes=1, 
+                        embedding_dropout=embedding_dropout_rate, 
+                        mlp_dropout=mlp_dropout_rate, 
+                     
+                        num_transformer_layers = num_transformer_layers, 
+                        num_heads = num_heads,
+                        mlp_size = mlp_size
+                        )
         self.scaler = scaler
         self.criterion = nn.BCEWithLogitsLoss()
         
@@ -143,8 +141,8 @@ class ViTModule(pl.LightningModule):
         preds = (torch.sigmoid(logits) > 0.5).int()
         self.train_acc(preds, y.long())
         
-        self.log('train/loss', loss, on_step=True, on_epoch=True)
-        self.log('train/acc', self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/acc', self.train_acc, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -199,9 +197,10 @@ class ViTModule(pl.LightningModule):
 
     def configure_optimizers(self):
         
-        EPOCHS = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 30 
-        decay_start_epoch = int(EPOCHS * .2)
+        EPOCHS = self.trainer.max_epochs
       
+        decay_start_epoch = self.hparams.decay_start_epoch
+    
    
         optimizer = torch.optim.AdamW( 
             params=self.parameters(), 
@@ -214,7 +213,7 @@ class ViTModule(pl.LightningModule):
 
         scheduler_initial = LinearLR(
             optimizer, 
-            start_factor=1.0, 
+            start_factor=0.5, 
             end_factor=1.0, 
             total_iters=decay_start_epoch
         )
@@ -222,7 +221,7 @@ class ViTModule(pl.LightningModule):
         scheduler_decay = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.70,
+            end_factor=0.1,
             total_iters=(EPOCHS - decay_start_epoch)
         )
 
@@ -266,23 +265,20 @@ class ThresholdStopper(Callback):
 
 
 def main():
-    pl.seed_everything(42)
-
-
-    policy_path = sys.argv[1]
+    
+    policy_path = sys.argv[1] 
     optimal_config_values = json.load(open(policy_path))
     TASK = optimal_config_values['TASK']
+    pl.seed_everything(optimal_config_values['seed'])
 
-    wandb.init(project=f"ViT-Replication-QM9-Task{TASK}", config=optimal_config_values)
-        
+    
+    run_name = f"{secrets.token_hex(4)}"
+    torch.set_float32_matmul_precision('medium')
+    wandb.finish()
+    wandb.init(project=f"ViT-QM9-Classification-{TASK}", config=optimal_config_values)
     config = wandb.config
 
-    run_name = f"augment={config.augment}&epochs={config.epochs}&batch_size={config.batch_size}&lr={config.lr}&scheduler={config.scheduler}&num_transformer_layers={config.num_transformer_layers}&num_heads={config.num_heads}&emb_dim={config.emb_dim}&mlp_size={config.mlp_size}&emb_dropout={config.emb_dropout}&mlp_dropout={config.mlp_dropout}"
-
     df_full = npy_preprocessor("qm9_filtered.npy")
-    
-    df_full["binary_rotation"] = list(((np.stack(df_full["rotation"].values) > 0).astype(int)))
-
     original_count = len(df_full)
     print(f"Original file has {original_count} total samples.")
     df_full = df_full.drop_duplicates(subset=['inchi'], keep='first')
@@ -291,9 +287,7 @@ def main():
     print(f"Found and removed {duplicates_removed} duplicate InChI molecules.")
     print(f"There are now {unique_count} unique samples remaining.")
 
-
-
-
+    df_full["binary_rotation"] = list(((np.stack(df_full["rotation"].values) > 0).astype(int)))
     if TASK == 1:
         print("TASK 1 active: Filtering population *before* splitting.")
         chiral_mask = df_full['chiral_centers'].apply(len) == 1
@@ -417,7 +411,7 @@ def main():
 
 
     
-    model = ViTModule(learning_rate=config.lr, 
+    model = ViTModule(in_channels= config.in_channels, patch_size=config.patch_size, learning_rate=config.lr, 
                         embedding_dim=config.emb_dim, 
                         embedding_dropout_rate=config.emb_dropout, 
                         mlp_dropout_rate=config.mlp_dropout,
@@ -425,24 +419,17 @@ def main():
                         num_heads=config.num_heads,
                         mlp_size=config.mlp_size,
                         scaler=None, 
-                        use_clamping=config.use_clamping,
-                        clamp_range=config.clamp_range,
+                        decay_start_epoch=config.decay_start_epoch,
                         weight_decay=config.weight_decay, 
                         test_ids=test_ids_to_pass
                         )
 
     early_stop_callback = EarlyStopping(
-        monitor='val/loss', 
+        monitor='val/acc', 
         min_delta=0.00, 
-        patience=2, 
+        patience=optimal_config_values["patience"], 
         verbose=False,
-        mode='min' 
-    )
-
-    epoch_3_stopper = ThresholdStopper(
-        monitor='val/loss_epoch',
-        threshold=0.68, 
-        check_epoch=9    
+        mode='max' 
     )
     wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
 
@@ -454,12 +441,12 @@ def main():
         gradient_clip_val=config.grad_clip, 
         callbacks=[
             LearningRateMonitor(logging_interval='step'),
-            # early_stop_callback, 
-            # epoch_3_stopper  # <-- Use the new callback
+            early_stop_callback
+
         ]
     )
     
-    
+
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
     wandb.finish()

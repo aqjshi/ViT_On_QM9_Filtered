@@ -1,5 +1,6 @@
 {
     "TASK": 1,
+    "seed":42,
     "augment": false,
     "only_mask": false,
     "use_reflection": true, 
@@ -11,7 +12,5 @@
     "n_estimators": 6000,
     "max_depth":16, 
     "n_jobs": 6, 
-    "seed": 43,
     "reg_lambda": 4
-
 } 
