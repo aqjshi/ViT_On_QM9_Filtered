@@ -21,6 +21,22 @@ pip3 install -r requirements.txt
 Prerequisites
 pip install -r requirements.txt
 
+
+
+ensure environment align with gpu 
+
+python -c "import torch; print('PyTorch:',torch.__version__); print('CUDA build:',torch.version.cuda); print('CUDA available:',torch.cuda.is_available()); print('GPU count:',torch.cuda.device_count())"
+
+should look like this
+
+>> 
+PyTorch: 2.14.1+cu132
+CUDA build: 13.2
+CUDA available: True
+GPU count: 1
+
+
+
 Have qm9_filtered.npy in the same directory as readme
 
 
