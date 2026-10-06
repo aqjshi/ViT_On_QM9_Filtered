@@ -5,11 +5,11 @@
     "only_mask": true,
     "use_reflection": false, 
     "batch_size": 64,
-    "emb_dim": 384 ,
-    "emb_dropout": 0.05, 
+    "embedding_dim": 384 ,
+    "embedding_dropout": 0.05, 
     "decay_start_epoch": 3,
-    "epochs": 50,
-    "lr": 0.0002,
+    "epochs": 100,
+    "learning_rate": 0.0002,
     "mlp_dropout": 0.05,
     "mlp_size": 512 ,
     "num_heads": 4,
@@ -21,3 +21,6 @@
     "grad_clip": 0.46, 
     "patience":8
 }
+
+
+

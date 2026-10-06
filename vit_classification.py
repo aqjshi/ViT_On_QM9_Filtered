@@ -93,7 +93,7 @@ class ViT(nn.Module):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, decay_start_epoch=None, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
+                 num_heads, mlp_size, decay_start_epoch=None, embedding_dropout=0.0, mlp_dropout=0.0, scaler=None, 
          
                  test_ids=None,
                  weight_decay: float = 0.0):
@@ -111,8 +111,8 @@ class ViTModule(pl.LightningModule):
                         embedding_dim=embedding_dim, 
 
                         num_classes=1, 
-                        embedding_dropout=embedding_dropout_rate, 
-                        mlp_dropout=mlp_dropout_rate, 
+                        embedding_dropout=embedding_dropout, 
+                        mlp_dropout=mlp_dropout, 
                      
                         num_transformer_layers = num_transformer_layers, 
                         num_heads = num_heads,
@@ -411,10 +411,10 @@ def main():
 
 
     
-    model = ViTModule(in_channels= config.in_channels, patch_size=config.patch_size, learning_rate=config.lr, 
-                        embedding_dim=config.emb_dim, 
-                        embedding_dropout_rate=config.emb_dropout, 
-                        mlp_dropout_rate=config.mlp_dropout,
+    model = ViTModule(in_channels= config.in_channels, patch_size=config.patch_size, learning_rate=config.learning_rate, 
+                        embedding_dim=config.embedding_dim, 
+                        embedding_dropout=config.embedding_dropout, 
+                        mlp_dropout=config.mlp_dropout,
                         num_transformer_layers=config.num_transformer_layers,
                         num_heads=config.num_heads,
                         mlp_size=config.mlp_size,
