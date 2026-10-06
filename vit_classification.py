@@ -265,7 +265,7 @@ class ThresholdStopper(Callback):
 
 
 def main():
-    
+    torch.cuda.set_per_process_memory_fraction(0.3, 0)
     policy_path = sys.argv[1] 
     optimal_config_values = json.load(open(policy_path))
     TASK = optimal_config_values['TASK']

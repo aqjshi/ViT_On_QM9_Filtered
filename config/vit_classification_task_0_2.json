@@ -5,11 +5,11 @@
     "only_mask": true,
     "use_reflection": false, 
     "batch_size": 32,
-    "emb_dim": 384 ,
-    "emb_dropout": 0.05, 
+    "embedding_dim": 384 ,
+    "embedding_dropout": 0.05, 
     "decay_start_epoch": 3,
     "epochs": 100,
-    "lr": 0.00001,
+    "learning_rate": 0.00001,
     "mlp_dropout": 0.1,
     "mlp_size": 512 ,
     "num_heads": 4,
@@ -17,7 +17,7 @@
     "in_channels":8, 
     "patch_size":27,
     "scheduler": true,
-    "weight_decay":0.00005, 
+    "weight_decay":0.00001, 
     "grad_clip": 0.47, 
     "patience":8
 }
