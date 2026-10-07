@@ -6,20 +6,20 @@
     "use_reflection": false, 
     "batch_size": 64,
     "embedding_dim": 384 ,
-    "embedding_dropout": 0.05, 
+    "embedding_dropout": 0.1, 
     "decay_start_epoch": 3,
     "epochs": 100,
     "learning_rate": 0.0002,
     "mlp_dropout": 0.05,
     "mlp_size": 512 ,
-    "num_heads": 4,
+    "num_heads": 64,
     "num_transformer_layers": 6,
     "in_channels":8, 
     "patch_size":27,
     "scheduler": true,
-    "weight_decay":0.0001, 
-    "grad_clip": 0.46, 
-    "patience":8
+    "weight_decay":0.00001, 
+    "grad_clip": 0.4, 
+    "patience":12
 }
 
 

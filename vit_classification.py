@@ -3,7 +3,7 @@ from torch import nn
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from torchmetrics import Accuracy
 from tqdm import tqdm
 import numpy as np
@@ -431,7 +431,19 @@ def main():
         verbose=False,
         mode='max' 
     )
-    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Task{TASK}', name=run_name)
+
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="checkpoints/",
+        filename=f"vit-{run_name}-{{epoch:02d}}-{{val/acc:.4f}}",
+        monitor="val/acc",
+        mode="max",
+        save_top_k=1,            # Keeps only the single best model
+        save_weights_only=False, # Set to True if disk space is limited
+        auto_insert_metric_name=False
+    )
+
+    
+    wandb_logger = WandbLogger(project=f"ViT-QM9-Classification-{TASK}", name=run_name)
 
     trainer = pl.Trainer(
         num_sanity_val_steps=0, 
@@ -441,14 +453,15 @@ def main():
         gradient_clip_val=config.grad_clip, 
         callbacks=[
             LearningRateMonitor(logging_interval='step'),
-            early_stop_callback
+            early_stop_callback, 
+            checkpoint_callback
 
         ]
     )
     
 
     trainer.fit(model, datamodule=data_module)
-    trainer.test(model, datamodule=data_module)
+    trainer.test(model, datamodule=data_module, ckpt_path="best")
     wandb.finish()
 
     
