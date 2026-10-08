@@ -4,7 +4,7 @@ from torch import nn
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping
+from pytorch_lightning.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from tqdm import tqdm
 import numpy as np
 from pytorch_lightning.loggers import WandbLogger
@@ -31,20 +31,23 @@ from core.utils import npy_preprocessor, scale_x_coordinates
 from core.dataset import MoleculeSequenceDataset, QMDataModule
 from core.augmentation import reflect_molecule
 
+OUT_DIR = os.path.join(PROJECT_ROOT, "out")
+
+
 
 
 class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, embedding_dropout_rate=0.0, mlp_dropout_rate=0.0, scaler=None, 
-                 weight_decay=0.0, test_ids=None, output_file_name= None): 
+                 num_heads, mlp_size, decay_start_epoch, embedding_dropout, mlp_dropout, scaler, 
+                 weight_decay, test_ids, output_file_name): 
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
         self.output_file_name =output_file_name
         self.model = ViT(in_channels=in_channels, patch_size=patch_size, embedding_dim=embedding_dim, 
                          num_classes=1, 
-                         embedding_dropout=embedding_dropout_rate, 
-                         mlp_dropout=mlp_dropout_rate,
+                         embedding_dropout=embedding_dropout, 
+                         mlp_dropout=mlp_dropout,
                          num_transformer_layers = num_transformer_layers, 
                          num_heads = num_heads,
                          mlp_size = mlp_size
@@ -101,6 +104,13 @@ class ViTModule(pl.LightningModule):
         self.log('val/mae', unscaled_mae, on_epoch=True, prog_bar=True)
 
 
+        bin_pred = (unscaled_preds > 0).astype(int)
+        bin_true = (unscaled_labels > 0).astype(int)
+        val_acc = (bin_pred == bin_true).mean()
+        self.log('val/acc', float(val_acc), on_epoch=True, prog_bar=True)
+
+
+
     def on_test_epoch_end(self):
         # 1. Gather 1D scaled arrays
         all_scaled_preds_flat = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
@@ -121,8 +131,16 @@ class ViTModule(pl.LightningModule):
         unscaled_labels = self.scaler.inverse_transform(scaled_labels_2d).flatten() # Output is (N, 1), flatten back to 1D
         
         unscaled_mae = np.abs(unscaled_preds - unscaled_labels).mean()
+
         
         self.log('test/mae', unscaled_mae, on_epoch=True, prog_bar=True)
+
+        bin_test_pred = (unscaled_preds > 0).astype(int)
+        bin_test_true = (unscaled_labels > 0).astype(int)
+        test_acc = (bin_test_pred == bin_test_true).mean()
+        self.log('test/acc', float(test_acc), on_epoch=True, prog_bar=True)
+
+
         results_df = pd.DataFrame({
             'item_id': self.test_ids,
             'true_value_unscaled': unscaled_labels,
@@ -131,9 +149,13 @@ class ViTModule(pl.LightningModule):
             'true_value_scaled': all_scaled_labels_flat, 
             'prediction_scaled': all_scaled_preds_flat, 
         })
-        # Use the wandb run name to make the file unique
+        os.makedirs(OUT_DIR, exist_ok=True)
+                # Use the wandb run name to make the file unique
         csv_filename = f"{self.output_file_name}.csv"
-        results_df.to_csv(csv_filename, index=False)
+        output_file = os.path.join(OUT_DIR, csv_filename)
+
+
+        results_df.to_csv(output_file, index=False)
         print(f"Saved predictions to {csv_filename}")
 
     def test_step(self, batch, batch_idx):
@@ -154,78 +176,49 @@ class ViTModule(pl.LightningModule):
             
 
     def configure_optimizers(self):
-        LR_START = 0.00015       # The initial learning rate (self.hparams.learning_rate)
-        E_P1 = 70                # End of Phase 1 (Start of Aggressive Decay)
-        E_P2 = 200                # End of Phase 2 (Start of Fine-Tuning Decay)
-        LR_P2_END = 0.00006      # Target LR at Epoch 40
-        LR_END = 0.0000001        # Final target LR at the end of total epochs
+            
+            EPOCHS = self.trainer.max_epochs
+          
+            decay_start_epoch = self.hparams.decay_start_epoch
         
-        # --- CALCULATIONS ---
-        EPOCHS_TOTAL = self.trainer.max_epochs if hasattr(self.trainer, 'max_epochs') else 150
-
-        # The end factor for the final LR, relative to LR_START
-        FINAL_END_FACTOR = LR_END / LR_START 
+       
+            optimizer = torch.optim.AdamW( 
+                params=self.parameters(), 
+                lr=self.hparams.learning_rate, 
+                weight_decay=self.hparams.weight_decay,  
+                eps=1e-7, 
+                betas=(0.8, 0.99)
+            )
+    
+    
+            scheduler_initial = LinearLR(
+                optimizer, 
+                start_factor=0.5, 
+                end_factor=1.0, 
+                total_iters=decay_start_epoch
+            )
         
-        # The end factor for the Phase 2 LR, relative to LR_START
-        FACTOR_P2_END = LR_P2_END / LR_START
-        
-        # --- OPTIMIZER ---
-        optimizer = torch.optim.AdamW(params=self.parameters(), 
-                                    lr=LR_START, 
-                                    weight_decay=self.hparams.weight_decay, 
-                                    eps=1e-7, 
-                                    betas=(0.8, 0.99))
-
-        # ----------------------------------------------------
-        # Phase 1: Constant LR (Epoch 0 to E_P1=10)
-        # ----------------------------------------------------
-        # total_iters = 10
-        scheduler1 = LinearLR(
-            optimizer, 
-            start_factor=1.0, 
-            end_factor=1.0, 
-            total_iters=E_P1 
-        )
-        
-        # ----------------------------------------------------
-        # Phase 2: Aggressive Decay (Epoch 10 to E_P2=40)
-        # ----------------------------------------------------
-        # total_iters = 40 - 10 = 30
-        scheduler2 = LinearLR(
-            optimizer, 
-            start_factor=1.0, 
-            end_factor=FACTOR_P2_END, # Decays from 1.0 down to LR_P2_END / LR_START
-            total_iters=(E_P2 - E_P1) 
-        )
-        
-        # ----------------------------------------------------
-        # Phase 3: Long-term Fine-tuning Decay (Epoch 40 to End)
-        # ----------------------------------------------------
-        # total_iters = EPOCHS_TOTAL - 40 (e.g., 150 - 40 = 110)
-        scheduler3 = LinearLR(
-            optimizer, 
-            start_factor=FACTOR_P2_END, # Starts where Phase 2 ended (at 4.0e-5 / 1.5e-4)
-            end_factor=FINAL_END_FACTOR, # Ends at the overall target (1.0e-6 / 1.5e-4)
-            total_iters=(EPOCHS_TOTAL - E_P2) 
-        )
-        
-        # ----------------------------------------------------
-        # Sequential Implementation
-        # ----------------------------------------------------
-        scheduler = SequentialLR(
-            optimizer,
-            schedulers=[scheduler1, scheduler2, scheduler3],
-            milestones=[E_P1, E_P2] 
-        )
-        
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': {
-                'scheduler': scheduler,
-                'interval': 'epoch', 
-                'frequency': 1,
+            scheduler_decay = LinearLR(
+                optimizer, 
+                start_factor=1.0, 
+                end_factor=0.1,
+                total_iters=(EPOCHS - decay_start_epoch)
+            )
+    
+            scheduler = SequentialLR(
+                optimizer,
+                schedulers=[scheduler_initial, scheduler_decay],
+                milestones=[decay_start_epoch]
+            )
+            
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': {
+                    'scheduler': scheduler,
+                    'interval': 'epoch', 
+                    'frequency': 1,
+                }
             }
-        }
 
 def main():
 
@@ -248,7 +241,6 @@ def main():
     duplicates_removed = original_count - unique_count
     print(f"Found and removed {duplicates_removed} duplicate InChI molecules.")
     print(f"There are now {unique_count} unique samples remaining.")
-
 
 
 
@@ -342,8 +334,24 @@ def main():
     else:
         train_aug1 = pd.DataFrame(columns=['xyz', 'rotation'])
 
+    raw_combined_train_df = pd.concat([real_train_df, train_aug1], ignore_index=True)
 
-    final_train_df = pd.concat([real_train_df, train_aug1], ignore_index=True)
+    y_train_raw = np.stack(raw_combined_train_df['rotation'].values)[:, 1].astype(float)
+    
+    mean_orig = np.mean(y_train_raw)
+    std_orig = np.std(y_train_raw)
+    z_scores_orig = (y_train_raw - mean_orig) / std_orig
+
+    # ----------------------------------------------------
+    # 3. Create Inlier Mask & Filter DataFrame
+    # ----------------------------------------------------
+    z_thresh = optimal_config_values.get('train_omit_z_score', 3.0)
+    
+    # Keep only samples within the Z-score boundary (|Z| <= threshold)
+    inlier_mask = np.abs(z_scores_orig) <= z_thresh
+    outlier_count = int((~inlier_mask).sum())
+    print("outlier_count", outlier_count)
+    final_train_df = raw_combined_train_df[inlier_mask].reset_index(drop=True)
 
     # Our val and test sets remain the "clean" originals
     final_val_df = val_df
@@ -383,14 +391,15 @@ def main():
     data_module.set_datasets(train_dataset, val_dataset, test_dataset)
 
     model = ViTModule(in_channels= config.in_channels, patch_size=config.patch_size,
-                      learning_rate=config.lr, 
+                      learning_rate=config.learning_rate, 
                         embedding_dim=config.embedding_dim, 
-                        embedding_dropout_rate=config.embedding_dropout_rate, 
-                        mlp_dropout_rate=config.mlp_dropout_rate,
+                        embedding_dropout=config.embedding_dropout, 
+                        mlp_dropout=config.mlp_dropout,
                         num_transformer_layers=config.num_transformer_layers,
                         num_heads=config.num_heads,
                         mlp_size=config.mlp_size,
                         scaler=y_scaler,
+                        decay_start_epoch=config.decay_start_epoch,
                         weight_decay=config.weight_decay, 
                         test_ids=test_ids_to_pass, 
                         output_file_name=run_name
@@ -399,15 +408,25 @@ def main():
 
     
     early_stop_callback = EarlyStopping(
-        monitor='val/loss', 
+        monitor='val/acc', 
         min_delta=0.00, 
         patience=optimal_config_values["patience"], 
         verbose=False,
-        mode='min' 
+        mode='max' 
+    )
+    
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="checkpoints/",
+        filename=f"vit-regression-{run_name}-{{epoch:02d}}-{{val/acc:.4f}}",
+        monitor="val/mae",
+        mode="min",
+        save_top_k=1,            # Keeps only the single best model
+        save_weights_only=False, # Set to True if disk space is limited
+        auto_insert_metric_name=False
     )
 
 
-    wandb_logger = WandbLogger(project=f'ViT-Replication-QM9-Regression-Task{TASK}', name=run_name)
+    wandb_logger = WandbLogger(project=f'ViT-QM9-Regression-{TASK}', name=run_name)
 
     trainer = pl.Trainer(
         max_epochs=config.epochs, 
@@ -416,12 +435,13 @@ def main():
         gradient_clip_val=config.grad_clip, 
         callbacks=[
             LearningRateMonitor(logging_interval='step'), 
-            early_stop_callback
+            early_stop_callback, 
+            checkpoint_callback
         ]
     )
     
     trainer.fit(model, datamodule=data_module)
-    trainer.test(model, datamodule=data_module)
+    trainer.test(model, datamodule=data_module, ckpt_path="best")
     wandb.finish()
 
     end_time   = time.time()

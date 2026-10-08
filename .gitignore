@@ -7,5 +7,9 @@ ViT-Replication-QM9-Regression-Task0/
 ViT-Replication-QM9-Regression-Task1/
 ViT-Replication-QM9-Task0/
 ViT-Replication-QM9-Task1/
+ViT-QM9-Regression-0/
+ViT-QM9-Regression-1/
+ViT-QM9-Classification-0/
+ViT-QM9-Classification-1/
 core/__pycache__
 checkpoints

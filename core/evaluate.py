@@ -7,14 +7,17 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_sc
 from scipy import stats
 import statsmodels.api as sm
 import seaborn as sns
+import os 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
-def read_data(filename):
-    data = np.load(filename, allow_pickle=True)
-    return pd.DataFrame(data.tolist())
 
-def npy_preprocessor(filename):
-    df = read_data(filename)
-    return df
+from core.utils import npy_preprocessor, scale_x_coordinates
+OUT_DIR = os.path.join(PROJECT_ROOT, "out")
+
+
 
 def print_stats(series, name):
     print(f"\n--- Statistics for {name} ---")
@@ -128,112 +131,13 @@ def analyze_prediction(filepath, threshold=0.5):
     
     return True # Return True to signal success
 
-def compare_models(filepath1, filepath2):
-    """
-    Compares two model prediction CSVs on their intersecting item_ids.
-    """
-    print("\n\n--- Intersection Performance Comparison ---")
-    
-    try:
-        df1 = pd.read_csv(filepath1)
-        df2 = pd.read_csv(filepath2)
-    except FileNotFoundError as e:
-        print(f"Error loading file for comparison: {e}")
-        return
-
-    # Extract run names for cleaner labels
-    model1_name = filepath1.replace('.csv', '')
-    model2_name = filepath2.replace('.csv', '')
-
-    # Find intersection using a merge
-    merged_df = pd.merge(df1, df2, on='item_id', suffixes=('_m1', '_m2'))
-    
-    num_intersection = len(merged_df)
-    if num_intersection == 0:
-        print("Error: No intersecting item_ids found between the two files. Cannot compare.")
-        return
-        
-    print(f"Found {num_intersection} intersecting samples for comparison.")
-
-    # Sanity Check: Verify true values are identical
-    is_equal = (merged_df['true_value_unscaled_m1'] == merged_df['true_value_unscaled_m2']).all()
-    if not is_equal:
-        print("WARNING: 'true_value_unscaled' for intersecting items are NOT identical. Comparison may be invalid.")
-    else:
-        print("Sanity Check: 'true_value_unscaled' for intersecting items are identical. Proceeding.")
-
-    # --- Calculate Metrics on Intersecting Set ---
-    y_true = merged_df['true_value_unscaled_m1'] # Use m1 as the "true" source
-    y_true_class = (y_true > 0).astype(int)
-    
-    # Model 1 Metrics
-    y_pred_m1 = merged_df['prediction_unscaled_m1']
-    mae_m1 = mean_absolute_error(y_true, y_pred_m1)
-    rmse_m1 = np.sqrt(mean_squared_error(y_true, y_pred_m1))
-    y_pred_class_m1 = (y_pred_m1 > 0).astype(int)
-    sign_acc_m1 = accuracy_score(y_true_class, y_pred_class_m1)
-    sign_f1_m1 = f1_score(y_true_class, y_pred_class_m1)
-
-    # Model 2 Metrics
-    y_pred_m2 = merged_df['prediction_unscaled_m2']
-    mae_m2 = mean_absolute_error(y_true, y_pred_m2)
-    rmse_m2 = np.sqrt(mean_squared_error(y_true, y_pred_m2))
-    y_pred_class_m2 = (y_pred_m2 > 0).astype(int)
-    sign_acc_m2 = accuracy_score(y_true_class, y_pred_class_m2)
-    sign_f1_m2 = f1_score(y_true_class, y_pred_class_m2)
-
-    # --- Create Comparison Matrix ---
-    data = {
-        'Metric': ['MAE', 'RMSE', 'Sign Acc', 'Sign F1'],
-        model1_name: [mae_m1, rmse_m1, sign_acc_m1, sign_f1_m1],
-        model2_name: [mae_m2, rmse_m2, sign_acc_m2, sign_f1_m2],
-    }
-    
-    comp_df = pd.DataFrame(data)
-    
-    # Determine winner for each metric
-    winners = []
-    for i, row in comp_df.iterrows():
-        metric_name = row['Metric']
-        val1 = row[model1_name]
-        val2 = row[model2_name]
-        
-        # Lower is better for MAE/RMSE
-        if metric_name in ['MAE', 'RMSE']:
-            if val1 < val2:
-                winners.append(f"{model1_name} wins")
-            elif val2 < val1:
-                winners.append(f"{model2_name} wins")
-            else:
-                winners.append('Tie')
-        # Higher is better for Sign Acc/F1
-        else:
-            if val1 > val2:
-                winners.append(f"{model1_name} wins")
-            elif val2 > val1:
-                winners.append(f"{model2_name} wins")
-            else:
-                winners.append('Tie')
-                
-    comp_df['Winner'] = winners
-    
-    print("\n--- Comparison on Intersecting Samples ---")
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', 1000)
-    print(comp_df.to_string(index=False, float_format='{:.4g}'.format))
 
 def main():
-    if len(sys.argv) < 3: # Check for script name + 2 run names
-        print("ERROR: Not enough run names provided.")
-        print("Usage: python analysis.py <RUN_NAME_1> <RUN_NAME_2>")
-        sys.exit(1) # Exit with an error code
-    
+  
     run_name1 = sys.argv[1]
-    csv_filename1 = f"{run_name1}.csv"
-    run_name2 = sys.argv[2]
-    csv_filename2 = f"{run_name2}.csv" # <-- Fixed bug
+    csv_filename1 = f"out/{run_name1}.csv"
 
-    print(f"--- Starting analysis for {run_name1} and {run_name2} ---")
+    print(f"--- Starting analysis for {run_name1} ---")
 
     # --- 1. Load and Analyze Source Data Stats (Only need to do this once) ---
     filename = 'qm9_filtered.npy'
@@ -274,29 +178,18 @@ def main():
     plt.legend()
     plt.grid(True, which="both", ls="--", alpha=0.5)
 
-    plot_filename = f"strata_overlay_{run_name1}_vs_{run_name2}.png" # Generic name
+    os.makedirs(OUT_DIR, exist_ok=True)
+    plot_filename = os.path.join(OUT_DIR, f"strata_overlay_{run_name1}.png")
+
     plt.savefig(plot_filename)
     plt.clf()
     print(f"\nSaved stratified overlay plot to {plot_filename}")
     
-    # --- 3. Run Prediction Analysis for each file ---
-    print("\n" + "="*50)
-    print(f" INDIVIDUAL ANALYSIS: {run_name1} ".center(50, "="))
-    print("="*50)
+    print(f" INDIVIDUAL ANALYSIS: {run_name1} ")
+
     if not analyze_prediction(csv_filename1, threshold=2):
         sys.exit(f"Failed to analyze {csv_filename1}. Exiting.")
     
-    print("\n" + "="*50)
-    print(f" INDIVIDUAL ANALYSIS: {run_name2} ".center(50, "="))
-    print("="*50)
-    if not analyze_prediction(csv_filename2, threshold=2):
-        sys.exit(f"Failed to analyze {csv_filename2}. Exiting.")
-
-    # --- 4. Run Head-to-Head Comparison ---
-    print("\n" + "="*50)
-    print(f" H2H COMPARISON: {run_name1} vs {run_name2} ".center(50, "="))
-    print("="*50)
-    compare_models(csv_filename1, csv_filename2)
 
 if __name__ == '__main__':
     main()

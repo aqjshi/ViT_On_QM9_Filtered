@@ -7,7 +7,7 @@
     "batch_size": 32,
     "embedding_dim": 384 ,
     "embedding_dropout": 0.05, 
-    "decay_start_epoch": 3,
+    "decay_start_epoch": 30,
     "epochs": 100,
     "learning_rate": 0.00001,
     "mlp_dropout": 0.1,

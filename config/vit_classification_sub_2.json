@@ -2,7 +2,7 @@
     "TASK": 1,
     "seed":42,
     "augment": false,
-    "only_mask": true,
+    "only_mask": false,
     "use_reflection": false, 
     "batch_size": 64,
     "embedding_dim": 384 ,
@@ -18,7 +18,7 @@
     "patch_size":27,
     "scheduler": true,
     "weight_decay":0.00001, 
-    "grad_clip": 0.42, 
+    "grad_clip": 0.6, 
     "patience":12
 }
 

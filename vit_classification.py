@@ -93,10 +93,9 @@ class ViT(nn.Module):
 
 class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
-                 num_heads, mlp_size, decay_start_epoch=None, embedding_dropout=0.0, mlp_dropout=0.0, scaler=None, 
-         
-                 test_ids=None,
-                 weight_decay: float = 0.0):
+                 num_heads, mlp_size, decay_start_epoch, embedding_dropout, mlp_dropout, scaler, 
+                 test_ids,
+                 weight_decay):
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
@@ -434,7 +433,7 @@ def main():
 
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints/",
-        filename=f"vit-{run_name}-{{epoch:02d}}-{{val/acc:.4f}}",
+        filename=f"vit-classification-{run_name}-{{epoch:02d}}-{{val/acc:.4f}}",
         monitor="val/acc",
         mode="max",
         save_top_k=1,            # Keeps only the single best model

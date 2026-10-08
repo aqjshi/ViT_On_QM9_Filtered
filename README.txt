@@ -41,13 +41,13 @@ Have qm9_filtered.npy in the same directory as readme
 
 
 ViT
-python vit_regression.py config/vit_regression_task_0.json                                  
-python vit_regression.py config/vit_regression_task_1.json                                  
-python vit_classification.py config/vit_classification_task_0.json                                  
-python vit_classification.py config/vit_classification_task_1.json                                  
+python vit_regression.py config/vit_regression_whole.json                                  
+python vit_regression.py config/vit_regression_sub.json                                  
+python vit_classification.py config/vit_classification_whole.json                                  
+python vit_classification.py config/vit_classification_sub.json                                  
 
 XGBoost
-python xgboost_regression.py config/xgboost_regression_task_0.json                                  
+python xgboost_regression.py config/xgboost_regression_whole.json                                  
 
 To change the hyperaparmeters, go inside the config set, ctrl optimal_config_values and update them in the config file. 
 
