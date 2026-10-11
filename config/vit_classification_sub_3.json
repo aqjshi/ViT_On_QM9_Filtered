@@ -18,7 +18,7 @@
     "patch_size":27,
     "scheduler": true,
     "weight_decay":0.00001, 
-    "grad_clip": 0.8, 
+    "grad_clip": 0.46, 
     "patience":12
 }
 
