@@ -40,6 +40,8 @@ GPU count: 1
 Have qm9_filtered.npy in the same directory as readme
 
 
+python eda.py config/vit_regression_whole.json    
+
 ViT
 python vit_regression.py config/vit_regression_whole.json                                  
 python vit_regression.py config/vit_regression_sub.json                                  

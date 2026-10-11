@@ -39,7 +39,7 @@ OUT_DIR = os.path.join(PROJECT_ROOT, "out")
 class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, decay_start_epoch, embedding_dropout, mlp_dropout, scaler, 
-                 weight_decay, test_ids, output_file_name): 
+                 weight_decay, start_learning_rate_ratio, end_learning_rate_ratio, test_ids, output_file_name): 
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
@@ -193,7 +193,7 @@ class ViTModule(pl.LightningModule):
     
             scheduler_initial = LinearLR(
                 optimizer, 
-                start_factor=0.5, 
+                start_factor=self.hparams.start_learning_rate_ratio, 
                 end_factor=1.0, 
                 total_iters=decay_start_epoch
             )
@@ -201,7 +201,7 @@ class ViTModule(pl.LightningModule):
             scheduler_decay = LinearLR(
                 optimizer, 
                 start_factor=1.0, 
-                end_factor=0.1,
+                end_factor=self.hparams.end_learning_rate_ratio,
                 total_iters=(EPOCHS - decay_start_epoch)
             )
     
@@ -345,7 +345,7 @@ def main():
     # ----------------------------------------------------
     # 3. Create Inlier Mask & Filter DataFrame
     # ----------------------------------------------------
-    z_thresh = optimal_config_values.get('train_omit_z_score', 3.0)
+    z_thresh = optimal_config_values.get('train_omit_z_score')
     
     # Keep only samples within the Z-score boundary (|Z| <= threshold)
     inlier_mask = np.abs(z_scores_orig) <= z_thresh
@@ -401,6 +401,8 @@ def main():
                         scaler=y_scaler,
                         decay_start_epoch=config.decay_start_epoch,
                         weight_decay=config.weight_decay, 
+                        start_learning_rate_ratio=config.start_learning_rate_ratio, 
+                        end_learning_rate_ratio=config.end_learning_rate_ratio,
                         test_ids=test_ids_to_pass, 
                         output_file_name=run_name
 
