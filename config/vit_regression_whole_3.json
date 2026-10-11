@@ -15,7 +15,7 @@
     "learning_rate": 0.00005,
     "mlp_dropout": 0.15,
     "mlp_size": 128,
-    "num_heads": 64,
+    "num_heads": 48,
     "num_transformer_layers": 4,
     "scheduler": true,
     "in_channels":8, 

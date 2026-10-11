@@ -14,7 +14,7 @@
     "train_omit_z_score":2.5,
     "learning_rate": 0.00005,
     "mlp_dropout": 0.15,
-    "mlp_size": 128,
+    "mlp_size": 192,
     "num_heads": 64,
     "num_transformer_layers": 4,
     "scheduler": true,
