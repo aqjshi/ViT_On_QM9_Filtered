@@ -410,11 +410,11 @@ def main():
 
     
     early_stop_callback = EarlyStopping(
-        monitor='val/acc', 
+        monitor='val/mae', 
         min_delta=0.00, 
         patience=optimal_config_values["patience"], 
         verbose=False,
-        mode='max' 
+        mode='min' 
     )
     
     checkpoint_callback = ModelCheckpoint(
