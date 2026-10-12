@@ -4,7 +4,7 @@
     "augment": true,
     "only_mask": true,
     "use_reflection": false, 
-    "batch_size": 32,
+    "batch_size": 512,
     "embedding_dim": 768,
     "embedding_dropout": 0.04, 
     "decay_start_epoch": 20,
