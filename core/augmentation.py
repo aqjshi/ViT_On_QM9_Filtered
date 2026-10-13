@@ -1,6 +1,11 @@
 import numpy as np
 from tqdm import tqdm
 
+def shuffle_atoms(xyz_data):
+    """Randomly shuffles atoms (rows) along the first dimension."""
+    indices = np.random.permutation(xyz_data.shape[0])
+    return xyz_data[indices]
+    
 
 def rotate_molecule(xyz_data, angle, axis='z'):
     """Rotate the first 3 columns (x, y, z) around the chosen axis by 'angle'."""

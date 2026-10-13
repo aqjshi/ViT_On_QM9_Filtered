@@ -14,15 +14,16 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 
-from core.augmentation import rotate_molecule, translate_molecule, reflect_molecule
+from core.augmentation import rotate_molecule, translate_molecule, reflect_molecule, shuffle_atoms
 
 
 class MoleculeSequenceDataset(Dataset):
-    def __init__(self, X, y, augment=False, reflection_only=False):
+    def __init__(self, X, y, augment=False, reflection_only=False, shuffle_atoms=False):
         self.X = X
         self.y = y
         self.augment = augment
         self.reflection_only = reflection_only 
+        self.shuffle_atoms = shuffle_atoms
         
     def __len__(self):
         return len(self.X)
@@ -39,6 +40,11 @@ class MoleculeSequenceDataset(Dataset):
                 molecule = rotate_molecule(molecule, angle, axis=axis)
             elif aug_choice == 'translate':
                 molecule = translate_molecule(molecule, magnitude=0.02)
+
+                
+        if self.shuffle_atoms:
+            molecule = shuffle_atoms(molecule)
+
 
         return torch.tensor(molecule, dtype=torch.float32), torch.tensor(target, dtype=torch.float32)
 

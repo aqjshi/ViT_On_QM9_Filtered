@@ -30,8 +30,7 @@ from core.ViT import ViT
 from core.utils import npy_preprocessor, scale_x_coordinates
 from core.dataset import MoleculeSequenceDataset, QMDataModule
 from core.augmentation import reflect_molecule
-
-OUT_DIR = os.path.join(PROJECT_ROOT, "out")
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 
 
 
@@ -112,6 +111,8 @@ class ViTModule(pl.LightningModule):
 
 
     def on_test_epoch_end(self):
+        print(f"\n[DEBUG] Running on_test_epoch_end. Outputs count: {len(self.test_step_outputs)}")
+        print(f"[DEBUG] Target save location: {OUT_DIR}")
         # 1. Gather 1D scaled arrays
         all_scaled_preds_flat = torch.cat([x['preds'] for x in self.test_step_outputs]).cpu().numpy()
         all_scaled_labels_flat = torch.cat([x['labels'] for x in self.test_step_outputs]).cpu().numpy()
@@ -357,7 +358,7 @@ def main():
     final_val_df = val_df
     final_test_df = test_df
 
-    test_ids_to_pass = final_test_df.index.values
+    test_ids_to_pass = final_test_df.index.tolist()
     print(f"Final Train set size (with aug): {len(final_train_df)}")
     print(f"Final Val set size: {len(final_val_df)}")
     print(f"Final Test set size: {len(final_test_df)}")
@@ -383,7 +384,7 @@ def main():
     y_test_scaled = y_scaler.transform(y_test).flatten()
 
     # --- Create Datasets ---
-    train_dataset = MoleculeSequenceDataset(X_train_scaled, y_train_scaled, augment=config.augment)
+    train_dataset = MoleculeSequenceDataset(X_train_scaled, y_train_scaled, augment=config.augment, shuffle_atoms=config.shuffle_atoms)
     val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val_scaled)
     test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test_scaled)
 
@@ -421,7 +422,7 @@ def main():
         dirpath="checkpoints/",
         filename=f"vit-regression-{run_name}-{{epoch:02d}}-{{val/acc:.4f}}",
         monitor="val/mae",
-        mode="min",
+        mode="min", 
         save_top_k=1,            # Keeps only the single best model
         save_weights_only=False, # Set to True if disk space is limited
         auto_insert_metric_name=False
