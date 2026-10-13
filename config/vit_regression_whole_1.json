@@ -23,5 +23,5 @@
     "shuffle_atoms": true, 
     "weight_decay":5e-2, 
     "grad_clip":2, 
-    "patience":200
+    "patience":100
 }
