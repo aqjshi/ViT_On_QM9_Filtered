@@ -8,7 +8,7 @@
     "batch_size": 512,
     "embedding_dim": 384 ,
     "embedding_dropout": 0.1, 
-    "decay_start_epoch": 3,
+    "decay_start_epoch": 20,
     "epochs": 500,
     "learning_rate": 0.0005,
     "start_learning_rate_ratio": 0.3,
