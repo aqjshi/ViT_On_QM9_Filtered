@@ -4,12 +4,15 @@
     "augment": false,
     "only_mask": false,
     "use_reflection": false, 
-    "batch_size": 64,
+    "shuffle_atoms": true,  
+    "batch_size": 512,
     "embedding_dim": 384 ,
     "embedding_dropout": 0.1, 
     "decay_start_epoch": 3,
-    "epochs": 100,
-    "learning_rate": 0.0002,
+    "epochs": 500,
+    "learning_rate": 0.0005,
+    "start_learning_rate_ratio": 0.3,
+    "end_learning_rate_ratio":0.1,
     "mlp_dropout": 0.05,
     "mlp_size": 512 ,
     "num_heads": 64,
@@ -18,8 +21,8 @@
     "patch_size":27,
     "scheduler": true,
     "weight_decay":0.00001, 
-    "grad_clip": 0.46, 
-    "patience":12
+    "grad_clip": 0.6, 
+    "patience":100
 }
 
 

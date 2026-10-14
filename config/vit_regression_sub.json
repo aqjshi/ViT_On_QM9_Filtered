@@ -8,7 +8,7 @@
     "embedding_dim": 768,
     "embedding_dropout": 0.0, 
     "decay_start_epoch": 20,
-    "epochs": 10,
+    "epochs": 800,
     "start_learning_rate_ratio": 0.3,
     "end_learning_rate_ratio":0.1,
     "train_omit_z_score":2.5,

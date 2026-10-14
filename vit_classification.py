@@ -95,7 +95,7 @@ class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, decay_start_epoch, embedding_dropout, mlp_dropout, scaler, 
                  test_ids,
-                 weight_decay):
+                 weight_decay, start_learning_rate_ratio, end_learning_rate_ratio):
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
@@ -197,10 +197,10 @@ class ViTModule(pl.LightningModule):
     def configure_optimizers(self):
         
         EPOCHS = self.trainer.max_epochs
-      
+        
         decay_start_epoch = self.hparams.decay_start_epoch
     
-   
+    
         optimizer = torch.optim.AdamW( 
             params=self.parameters(), 
             lr=self.hparams.learning_rate, 
@@ -212,7 +212,7 @@ class ViTModule(pl.LightningModule):
 
         scheduler_initial = LinearLR(
             optimizer, 
-            start_factor=0.5, 
+            start_factor=self.hparams.start_learning_rate_ratio, 
             end_factor=1.0, 
             total_iters=decay_start_epoch
         )
@@ -220,7 +220,7 @@ class ViTModule(pl.LightningModule):
         scheduler_decay = LinearLR(
             optimizer, 
             start_factor=1.0, 
-            end_factor=0.1,
+            end_factor=self.hparams.end_learning_rate_ratio,
             total_iters=(EPOCHS - decay_start_epoch)
         )
 
@@ -238,6 +238,7 @@ class ViTModule(pl.LightningModule):
                 'frequency': 1,
             }
         }
+    
 
 class ThresholdStopper(Callback):
     def __init__(self, monitor: str, threshold: float, check_epoch: int):
@@ -401,7 +402,7 @@ def main():
 
 
     # --- Create Datasets ---
-    train_dataset = MoleculeSequenceDataset(X_train_scaled, y_train, augment=config.augment)
+    train_dataset = MoleculeSequenceDataset(X_train_scaled, y_train, augment=config.augment, shuffle_atoms=config.shuffle_atoms)
     val_dataset = MoleculeSequenceDataset(X_val_scaled, y_val)
     test_dataset = MoleculeSequenceDataset(X_test_scaled, y_test)
 
@@ -419,6 +420,8 @@ def main():
                         mlp_size=config.mlp_size,
                         scaler=None, 
                         decay_start_epoch=config.decay_start_epoch,
+                        start_learning_rate_ratio=config.start_learning_rate_ratio, 
+                        end_learning_rate_ratio=config.end_learning_rate_ratio,
                         weight_decay=config.weight_decay, 
                         test_ids=test_ids_to_pass
                         )

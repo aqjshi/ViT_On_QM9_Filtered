@@ -53,3 +53,7 @@ python xgboost_regression.py config/xgboost_regression_whole.json
 
 To change the hyperaparmeters, go inside the config set, ctrl optimal_config_values and update them in the config file. 
 
+python core/evaluate.py {run_hash}
+
+
+

@@ -358,7 +358,7 @@ def main():
     final_val_df = val_df
     final_test_df = test_df
 
-    test_ids_to_pass = final_test_df.index.tolist()
+    test_ids_to_pass = final_test_df.index.values
     print(f"Final Train set size (with aug): {len(final_train_df)}")
     print(f"Final Val set size: {len(final_val_df)}")
     print(f"Final Test set size: {len(final_test_df)}")
