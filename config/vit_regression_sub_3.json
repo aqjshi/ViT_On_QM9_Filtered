@@ -21,6 +21,7 @@
     "in_channels":8, 
     "patch_size":27,
     "shuffle_atoms": true, 
+    "criterion":"huber",
     "weight_decay":5e-2, 
     "grad_clip":2, 
     "patience":100

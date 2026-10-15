@@ -18,7 +18,7 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 
 
 os.makedirs(OUT_DIR, exist_ok=True)
-def plot_four_way_comparison(y_orig_minmax, y_filt_minmax, y_orig_std, y_filt_std,
+def plot_four_way_comparison(train_omit_z_score, y_orig_minmax, y_filt_minmax, y_orig_std, y_filt_std,
                              orig_count, filt_count, save_path="out/four_way_distribution.png"):
     sns.set_theme(style="whitegrid")
     fig, axes = plt.subplots(2, 2, figsize=(18, 12))
@@ -27,11 +27,11 @@ def plot_four_way_comparison(y_orig_minmax, y_filt_minmax, y_orig_std, y_filt_st
         # (row, col, data, title, xlabel, color, vlines)
         (0, 0, y_orig_minmax, f"1. Original Data \n(N = {orig_count:,})", 
          "Scaled Value [0, 1]", "#2b5c8f"),
-        (0, 1, y_filt_minmax, f"2. Filtered Data (|Z| <= 3) \n(N = {filt_count:,})", 
+        (0, 1, y_filt_minmax, f"2. Filtered Data (|Z| <= {train_omit_z_score}) \n(N = {filt_count:,})", 
          "Scaled Value [0, 1]", "#1f77b4"),
         (1, 0, y_orig_std, f"3. Original Data — Standardized (Z-Score)\n(N = {orig_count:,})", 
          "Standardized Value (Mean=0, Std=1)", "#2ca02c"),
-        (1, 1, y_filt_std, f"4. Filtered Data (|Z| <= 3) — Re-Standardized\n(N = {filt_count:,})", 
+        (1, 1, y_filt_std, f"4. Filtered Data (|Z| <= {train_omit_z_score}) — Re-Standardized\n(N = {filt_count:,})", 
          "Standardized Value (Mean=0, Std=1)", "#2e8b57"),
     ]
 
@@ -385,7 +385,7 @@ def main():
     cols = ['X', 'Y', 'Z', 'H', 'C', 'N', 'O', 'F']
 
     # Display first 10 rows as a formatted table
-    print(pd.DataFrame(xyz_arr[:10], columns=cols))
+    print(pd.DataFrame(xyz_arr, columns=cols))
 
 
     dup_mask = df_full.duplicated(subset=["inchi"], keep=False)
@@ -433,7 +433,7 @@ def main():
     std_orig = np.std(y_raw)
     z_scores_orig = (y_raw - mean_orig) / std_orig
 
-    # 3. Identify and remove outliers (|Z| > 3.0)
+  
     outlier_mask = np.abs(z_scores_orig) > optimal_config_values['train_omit_z_score']
     outlier_count = np.sum(outlier_mask)
     y_filt = y_raw[~outlier_mask]
@@ -441,7 +441,7 @@ def main():
 
     print(f"--- Population Filtering Summary ---")
     print(f"Original Count  : {orig_count:,}")
-    print(f"Removed (|Z|>3) : {outlier_count:,} ({(outlier_count / orig_count) * 100:.2f}%)")
+    print(f"Removed (|Z|>{optimal_config_values['train_omit_z_score']}) : {outlier_count:,} ({(outlier_count / orig_count) * 100:.2f}%)")
     print(f"Retained Count  : {filt_count:,}\n")
 
 
@@ -460,6 +460,7 @@ def main():
     # 5. Render and save the 2x2 comparison figure
     out_image_path = os.path.join(OUT_DIR, "four_way_distribution.png")
     plot_four_way_comparison(
+        optimal_config_values['train_omit_z_score'],
         y_orig_minmax, 
         y_filt_minmax, 
         y_orig_std, 

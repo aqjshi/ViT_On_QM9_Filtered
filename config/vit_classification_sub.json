@@ -5,6 +5,7 @@
     "only_mask": false,
     "use_reflection": false, 
     "shuffle_atoms": true,  
+    "criterion":"bce",
     "batch_size": 512,
     "embedding_dim": 384 ,
     "embedding_dropout": 0.1, 
