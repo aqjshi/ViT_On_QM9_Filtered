@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import ast
 import pandas as pd
 import sys
-from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, f1_score, confusion_matrix, precision_score, recall_score
 from scipy import stats
 import statsmodels.api as sm
 import seaborn as sns
@@ -74,7 +74,11 @@ def analyze_prediction(filepath, threshold=0.5):
     
     sign_accuracy = accuracy_score(y_true_class, y_pred_class)
     sign_f1 = f1_score(y_true_class, y_pred_class, average='binary')
-    
+
+    sign_precision = precision_score(y_true_class, y_pred_class, average='binary')
+    sign_recall = recall_score(y_true_class, y_pred_class, average='binary')
+
+            
     cm = confusion_matrix(y_true_class, y_pred_class)
 
     dead_zone_count = (np.abs(true_unscaled) <= threshold).sum()
@@ -87,6 +91,7 @@ def analyze_prediction(filepath, threshold=0.5):
     metrics_data = {
         'run_name': filepath, 'MAE': mae, 'RMSE': rmse, 'Sign Acc': sign_accuracy,
         'Sign F1': sign_f1, f'Tol Acc (±{threshold})': tolerance_accuracy,
+            'Sign Precision': sign_precision, 'Sign Recall': sign_recall,
         f'Deadzone %': dead_zone_percent, 'T-Stat': t_stat, 'T-p_val': p_value,
         'Spearman rho': spearman_corr, 'Spearman p': spearman_p,
         'BP Stat': bp_lm_stat, 'BP p_val': bp_p_value,
