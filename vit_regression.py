@@ -38,7 +38,7 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 class ViTModule(pl.LightningModule):
     def __init__(self, in_channels, patch_size, learning_rate, embedding_dim, num_transformer_layers, 
                  num_heads, mlp_size, decay_start_epoch, embedding_dropout, mlp_dropout, scaler, 
-                 weight_decay, start_learning_rate_ratio, end_learning_rate_ratio, test_ids, output_file_name): 
+                 weight_decay, start_learning_rate_ratio, end_learning_rate_ratio, criterion, test_ids, output_file_name): 
         super().__init__()
         self.save_hyperparameters()
         self.test_ids =test_ids
@@ -52,7 +52,10 @@ class ViTModule(pl.LightningModule):
                          mlp_size = mlp_size
                          )
         self.scaler = scaler
-        self.criterion =  nn.HuberLoss(delta=1.0) 
+        if criterion == 'huber':
+            self.criterion =  nn.HuberLoss(delta=1.0) 
+        else:
+            self.criterion =  nn.MSELoss()
 
         self.train_mae = MeanAbsoluteError()
         self.val_mae = MeanAbsoluteError()
@@ -404,6 +407,7 @@ def main():
                         weight_decay=config.weight_decay, 
                         start_learning_rate_ratio=config.start_learning_rate_ratio, 
                         end_learning_rate_ratio=config.end_learning_rate_ratio,
+                        criterion=config.criterion,
                         test_ids=test_ids_to_pass, 
                         output_file_name=run_name
 
