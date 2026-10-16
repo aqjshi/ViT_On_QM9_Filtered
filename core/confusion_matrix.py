@@ -15,14 +15,14 @@ OUT_DIR = os.path.join(PROJECT_ROOT, "out")
 
 
 
-run_name = "lemon-wood-44"
-run_id = "dcvdbryq"
+run_name = "magic-water-45"
+run_id = "ymx0t2ln"
 # Data extracted from W&B run (vs70s605 / classic-sun-96):
 # Actual Neg, Pred Neg: 1735 (TN)
 # Actual Neg, Pred Pos: 594  (FP)
 # Actual Pos, Pred Neg: 656  (FN)
 # Actual Pos, Pred Pos: 1531 (TP)
-cm = np.array([[9164, 2980], [3531, 7867]])
+cm = np.array([[8833, 3311], [3282, 8116]])
 
 tn, fp, fn, tp = cm.ravel()
 total = cm.sum()

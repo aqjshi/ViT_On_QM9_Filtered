@@ -3,7 +3,7 @@
     "seed":42,
     "augment": false,
     "only_mask": false,
-    "use_reflection": true, 
+    "use_reflection": false, 
     "shuffle_atoms": true, 
     "criterion":"bce",
     "augment_size": 2,   

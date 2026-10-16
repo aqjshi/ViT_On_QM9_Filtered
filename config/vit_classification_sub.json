@@ -1,7 +1,7 @@
 {   
     "TASK": 1,
     "seed":42,
-    "augment": false,
+    "augment": true,
     "only_mask": false,
     "use_reflection": false, 
     "shuffle_atoms": true,  
@@ -17,7 +17,7 @@
     "mlp_dropout": 0.05,
     "mlp_size": 512 ,
     "num_heads": 64,
-    "num_transformer_layers": 6,
+    "num_transformer_layers": 4,
     "in_channels":8, 
     "patch_size":27,
     "scheduler": true,

@@ -10,7 +10,7 @@
     "embedding_dim": 384 ,
     "embedding_dropout": 0.05, 
     "decay_start_epoch": 20,
-    "epochs": 800,
+    "epochs": 500,
     "learning_rate": 0.0002,
     "start_learning_rate_ratio": 0.3,
     "end_learning_rate_ratio":0.1,
@@ -22,6 +22,6 @@
     "patch_size":27,
     "scheduler": true,
     "weight_decay":0.00001, 
-    "grad_clip": 0.47, 
+    "grad_clip": 0.6, 
     "patience":100
 }
