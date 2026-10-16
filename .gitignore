@@ -13,3 +13,4 @@ ViT-QM9-Classification-0/
 ViT-QM9-Classification-1/
 core/__pycache__
 checkpoints
+out_xgb/

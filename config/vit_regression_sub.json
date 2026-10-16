@@ -6,7 +6,7 @@
     "use_reflection": false, 
     "batch_size": 512,
     "embedding_dim": 768,
-    "embedding_dropout": 0.06, 
+    "embedding_dropout": 0.04, 
     "decay_start_epoch": 20,
     "epochs": 800,
     "start_learning_rate_ratio": 0.3,

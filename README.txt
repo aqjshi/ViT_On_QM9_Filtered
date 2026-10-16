@@ -58,3 +58,11 @@ python core/evaluate.py {run_hash}
 
 
 9134e414
+
+xgb params 
+82fcb335
+{'TASK': 0, 'seed': 42, 'augment': False, 'only_mask': False, 'use_reflection': False, 'shuffle_atoms': True, 'criterion': 'huber', 'train_omit_z_score': 2.5, 'augment_size': 4, 'patch_size': 27, 'in_channels': 8, 'eval_metric': 'mae', 'learning_rate': 0.04, 'epochs': 4000, 'max_depth': 12, 'n_jobs': 6, 'reg_lambda': 5, 'patience': 100}
+
+
+bca41c1b
+{'TASK': 1, 'seed': 42, 'augment': False, 'only_mask': False, 'use_reflection': False, 'shuffle_atoms': True, 'criterion': 'huber', 'train_omit_z_score': 2.5, 'augment_size': 2, 'patch_size': 27, 'in_channels': 8, 'eval_metric': 'mae', 'learning_rate': 0.02, 'epochs': 2000, 'max_depth': 16, 'n_jobs': 6, 'reg_lambda': 4, 'patience': 100}

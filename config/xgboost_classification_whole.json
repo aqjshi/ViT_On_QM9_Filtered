@@ -1,0 +1,19 @@
+{
+    "TASK": 1,
+    "seed":42,
+    "augment": false,
+    "only_mask": false,
+    "use_reflection": true, 
+    "shuffle_atoms": true, 
+    "criterion":"bce",
+    "augment_size": 2,   
+    "patch_size": 27,          
+    "in_channels": 8,   
+    "eval_metric": "acc",
+    "learning_rate":0.02,
+    "epochs": 6000,
+    "max_depth":16, 
+    "n_jobs": 6, 
+    "reg_lambda": 4, 
+    "patience": 100
+} 

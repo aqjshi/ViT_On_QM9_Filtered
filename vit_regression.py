@@ -30,7 +30,7 @@ from core.ViT import ViT
 from core.utils import npy_preprocessor, scale_x_coordinates
 from core.dataset import MoleculeSequenceDataset, QMDataModule
 from core.augmentation import reflect_molecule
-OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out_xgb")
 
 
 

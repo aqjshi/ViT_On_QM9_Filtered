@@ -89,7 +89,7 @@ def analyze_prediction(filepath, threshold=0.5):
     print(f"\n--- Prediction Analysis for {filepath} ---")
     
     metrics_data = {
-        'run_name': filepath, 'MAE': mae, 'RMSE': rmse, 'Sign Acc': sign_accuracy,
+        'run_name': filepath, 'samples': len(y_pred_class), 'MAE': mae, 'RMSE': rmse, 'Sign Acc': sign_accuracy,
         'Sign F1': sign_f1, f'Tol Acc (±{threshold})': tolerance_accuracy,
             'Sign Precision': sign_precision, 'Sign Recall': sign_recall,
         f'Deadzone %': dead_zone_percent, 'T-Stat': t_stat, 'T-p_val': p_value,
