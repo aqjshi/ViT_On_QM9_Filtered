@@ -50,6 +50,7 @@ python vit_classification.py config/vit_classification_sub.json
 
 XGBoost
 python xgboost_regression.py config/xgboost_regression_whole.json                                  
+python xgboost_regression.py config/xgboost_regression_sub.json                                  
 
 To change the hyperaparmeters, go inside the config set, ctrl optimal_config_values and update them in the config file. 
 
