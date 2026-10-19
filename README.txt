@@ -1,4 +1,3 @@
-Set up wandb 
 
 
 for admin:
@@ -19,7 +18,9 @@ pip3 install -r requirements.txt
 
 
 Prerequisites
-pip install -r requirements.txt
+Set up wandb 
+
+wandb init
 
 
 
